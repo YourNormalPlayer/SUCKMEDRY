@@ -513,9 +513,9 @@ end
 function Odyssey:OdysseyApplySub(win, page)
     local root = page.root
     if not root or #root.cards == 0 then return end
-    -- every tab is grid form: sections run the full width, one under another, and their options go two per line
-    root.cols[1].Size = UDim2.new(1, 0, 0, 0)
-    root.cols[2].Visible = false
+    -- every tab looks like Farm: sections in two columns side by side (never one long full-width list)
+    root.cols[1].Size = UDim2.new(0.5, -3, 0, 0)
+    root.cols[2].Visible = true
     root.colsFrame.Visible = true
     local groups = Odyssey:OdysseyGroups(page)
     if #groups == 0 then
@@ -523,12 +523,26 @@ function Odyssey:OdysseyApplySub(win, page)
     elseif not table.find(groups, page.subSel) then
         page.subSel = groups[1]
     end
+    local shown, usesCol = {}, {}
+    for _, card in ipairs(root.cards) do
+        if (#groups == 0) or Odyssey:OdysseyShownUnder(page, card) == page.subSel then
+            table.insert(shown, card)
+            usesCol[math.clamp(card:GetAttribute("Col") or 1, 1, 2)] = true
+        end
+    end
+    -- all in one column? share them out over both so the page stays two columns
+    local split = not (usesCol[1] and usesCol[2])
+    local k = 0
     for i, card in ipairs(root.cards) do
-        local on = (#groups == 0) or Odyssey:OdysseyShownUnder(page, card) == page.subSel
+        local on = table.find(shown, card) ~= nil
         card.Visible = on
-        card.Parent = root.cols[1]
-        card.LayoutOrder = i
-        card:SetAttribute("Wide", true)
+        if on then
+            k += 1
+            local col = split and ((k % 2 == 1) and 1 or 2) or math.clamp(card:GetAttribute("Col") or 1, 1, 2)
+            card.Parent = root.cols[col]
+            card.LayoutOrder = i
+        end
+        card:SetAttribute("Wide", false)
     end
     if #groups > 0 then page.frame.CanvasPosition = Vector2.new(0, 0) end
     Odyssey:OdysseyFill(win, page)
@@ -539,7 +553,7 @@ end
 function Odyssey:OdysseyRelayout(win, compact)
     for _, root in ipairs(win._roots) do
         for i, card in ipairs(root.cards) do
-            card.Parent = root.cols[1]
+            card.Parent = root.cols[math.clamp(card:GetAttribute("Col") or 1, 1, 2)]
             card.LayoutOrder = i
         end
         if root.colsFrame then root.colsFrame.Visible = #root.cards > 0 end
@@ -563,8 +577,7 @@ function Odyssey:OdysseySection(page, name, col)
         Parent = page.root.cols[col],
     })
     card:SetAttribute("Col", col)
-    card:SetAttribute("Wide", true)
-    card.Parent = page.root.cols[1]
+    card:SetAttribute("Wide", false)
     if page.subTab then card:SetAttribute("Sub", page.subTab) end
     Odyssey:OdysseyCorner(card, 6)
     Odyssey:OdysseyStroke(card)
@@ -624,10 +637,24 @@ function Odyssey:OdysseyGrid(card)
             table.sort(rows, function(x, y) return x.LayoutOrder < y.LayoutOrder end)
             for _, r in ipairs(rows) do r.Size = UDim2.new(1, 0, 0, r.Size.Y.Offset) end
             if wide then
-                local i = 1
-                while i <= #rows do
-                    local a, b = rows[i], rows[i + 1]
-                    if a:GetAttribute("Half") and b and b:GetAttribute("Half") and a.Visible and b.Visible then
+                -- pair each option with the next one that can share a line, even past a dropdown or label in between
+                local used = {}
+                local pairsList = {}
+                for i, a in ipairs(rows) do
+                    if not used[a] and a:GetAttribute("Half") and a.Visible then
+                        for j = i + 1, #rows do
+                            local b = rows[j]
+                            if not used[b] and b:GetAttribute("Half") and b.Visible then
+                                used[a], used[b] = true, true
+                                table.insert(pairsList, {a, b})
+                                break
+                            end
+                        end
+                    end
+                end
+                for _, pr in ipairs(pairsList) do
+                    local a, b = pr[1], pr[2]
+                    do
                         local line = Odyssey:OdysseyNew("Frame", {Name = "GridLine", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0),
                             AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = a.LayoutOrder, Parent = list})
                         a.Parent, b.Parent = line, line
@@ -635,9 +662,6 @@ function Odyssey:OdysseyGrid(card)
                         b.Size = UDim2.new(0.5, -3, 0, b.Size.Y.Offset)
                         a.Position = UDim2.new(0, 0, 0, 0)
                         b.Position = UDim2.new(0.5, 3, 0, 0)
-                        i += 2
-                    else
-                        i += 1
                     end
                 end
             end
