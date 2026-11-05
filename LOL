@@ -513,54 +513,24 @@ end
 function Odyssey:OdysseyApplySub(win, page)
     local root = page.root
     if not root or #root.cards == 0 then return end
-    local groups = Odyssey:OdysseyGroups(page)
-    root.cols[1].Size = UDim2.new(0.5, -3, 0, 0)
-    root.cols[2].Visible = true
+    -- every tab is grid form: sections run the full width, one under another, and their options go two per line
+    root.cols[1].Size = UDim2.new(1, 0, 0, 0)
+    root.cols[2].Visible = false
     root.colsFrame.Visible = true
+    local groups = Odyssey:OdysseyGroups(page)
     if #groups == 0 then
-        -- no top tabs on this tab: every section, in its own column
         page.subSel = nil
-        for i, card in ipairs(root.cards) do
-            card.Visible = true
-            card.Parent = root.cols[math.clamp(card:GetAttribute("Col") or 1, 1, 2)]
-            card.LayoutOrder = i
-            card:SetAttribute("Wide", false)
-        end
-        Odyssey:OdysseyFill(win, page)
-        for _, card in ipairs(root.cards) do Odyssey:OdysseyGrid(card) end
-        return
+    elseif not table.find(groups, page.subSel) then
+        page.subSel = groups[1]
     end
-    if not table.find(groups, page.subSel) then page.subSel = groups[1] end
-    local sel = page.subSel
-    local shown = {}
-    local usesCol = {}
-    for _, card in ipairs(root.cards) do
-        if Odyssey:OdysseyShownUnder(page, card) == sel then
-            table.insert(shown, card)
-            usesCol[math.clamp(card:GetAttribute("Col") or 1, 1, 2)] = true
-        end
-    end
-    -- keep the two-column grid: a top tab whose sections all sit in one column is split over both
-    local split = not (usesCol[1] and usesCol[2]) and #shown >= 2
-    local k = 0
     for i, card in ipairs(root.cards) do
-        local on = table.find(shown, card) ~= nil
+        local on = (#groups == 0) or Odyssey:OdysseyShownUnder(page, card) == page.subSel
         card.Visible = on
-        if on then
-            k += 1
-            local col = 1
-            if split then col = (k % 2 == 1) and 1 or 2
-            elseif #shown >= 2 then col = math.clamp(card:GetAttribute("Col") or 1, 1, 2) end
-            card.Parent = root.cols[col]
-            card.LayoutOrder = i
-        end
-        card:SetAttribute("Wide", on and #shown == 1)
+        card.Parent = root.cols[1]
+        card.LayoutOrder = i
+        card:SetAttribute("Wide", true)
     end
-    if #shown == 1 then
-        root.cols[1].Size = UDim2.new(1, 0, 0, 0)
-        root.cols[2].Visible = false
-    end
-    page.frame.CanvasPosition = Vector2.new(0, 0)
+    if #groups > 0 then page.frame.CanvasPosition = Vector2.new(0, 0) end
     Odyssey:OdysseyFill(win, page)
     for _, card in ipairs(root.cards) do Odyssey:OdysseyGrid(card) end
 end
@@ -569,8 +539,7 @@ end
 function Odyssey:OdysseyRelayout(win, compact)
     for _, root in ipairs(win._roots) do
         for i, card in ipairs(root.cards) do
-            local col = compact and 1 or math.clamp(card:GetAttribute("Col") or 1, 1, 2)
-            card.Parent = root.cols[col]
+            card.Parent = root.cols[1]
             card.LayoutOrder = i
         end
         if root.colsFrame then root.colsFrame.Visible = #root.cards > 0 end
@@ -594,6 +563,8 @@ function Odyssey:OdysseySection(page, name, col)
         Parent = page.root.cols[col],
     })
     card:SetAttribute("Col", col)
+    card:SetAttribute("Wide", true)
+    card.Parent = page.root.cols[1]
     if page.subTab then card:SetAttribute("Sub", page.subTab) end
     Odyssey:OdysseyCorner(card, 6)
     Odyssey:OdysseyStroke(card)
