@@ -327,16 +327,11 @@ function Odyssey:OdysseyBuildHeader(win)
     elseif page.kind == "search" then
         items = {{"Search results", function() end, true}}
     else
-        local seen = {}
-        for _, card in ipairs(page.root.cards) do
-            local g = Odyssey:OdysseyGroupOf(card)
-            if not seen[g] then
-                seen[g] = true
-                table.insert(items, {g, function()
-                    page.subSel = g
-                    Odyssey:OdysseyApplySub(win, page)
-                end, g == page.subSel})
-            end
+        for _, g in ipairs(Odyssey:OdysseyGroups(page)) do
+            table.insert(items, {g, function()
+                page.subSel = g
+                Odyssey:OdysseyApplySub(win, page)
+            end, g == page.subSel})
         end
     end
     local function paint(btn, on)
@@ -496,48 +491,78 @@ end
 function Odyssey:OdysseyGroupOf(card)
     local g = card:GetAttribute("Sub")
     if type(g) == "string" and g ~= "" then return g end
-    local n = tostring(card.Name):gsub("^Section_", "")
-    return n ~= "" and n or "More"
+    return nil
+end
+
+-- Top tabs of a page in order (empty = this tab has none)
+function Odyssey:OdysseyGroups(page)
+    local list, seen = {}, {}
+    for _, card in ipairs(page.root and page.root.cards or {}) do
+        local g = Odyssey:OdysseyGroupOf(card)
+        if g and not seen[g] then seen[g] = true table.insert(list, g) end
+    end
+    return list
+end
+
+-- The top tab a section shows under (sections nobody grouped go with the first top tab)
+function Odyssey:OdysseyShownUnder(page, card)
+    return Odyssey:OdysseyGroupOf(card) or Odyssey:OdysseyGroups(page)[1]
 end
 
 -- Tabs in tabs: only the sections under the picked top tab show (in both columns when they use both)
 function Odyssey:OdysseyApplySub(win, page)
     local root = page.root
     if not root or #root.cards == 0 then return end
-    local sel = page.subSel
-    local found = false
-    for _, card in ipairs(root.cards) do if Odyssey:OdysseyGroupOf(card) == sel then found = true break end end
-    if not found then
-        sel = Odyssey:OdysseyGroupOf(root.cards[1])
-        page.subSel = sel
+    local groups = Odyssey:OdysseyGroups(page)
+    root.cols[1].Size = UDim2.new(0.5, -3, 0, 0)
+    root.cols[2].Visible = true
+    root.colsFrame.Visible = true
+    if #groups == 0 then
+        -- no top tabs on this tab: every section, in its own column
+        page.subSel = nil
+        for i, card in ipairs(root.cards) do
+            card.Visible = true
+            card.Parent = root.cols[math.clamp(card:GetAttribute("Col") or 1, 1, 2)]
+            card.LayoutOrder = i
+            card:SetAttribute("Wide", false)
+        end
+        Odyssey:OdysseyFill(win, page)
+        for _, card in ipairs(root.cards) do Odyssey:OdysseyGrid(card) end
+        return
     end
+    if not table.find(groups, page.subSel) then page.subSel = groups[1] end
+    local sel = page.subSel
+    local shown = {}
     local usesCol = {}
     for _, card in ipairs(root.cards) do
-        if Odyssey:OdysseyGroupOf(card) == sel then usesCol[math.clamp(card:GetAttribute("Col") or 1, 1, 2)] = true end
+        if Odyssey:OdysseyShownUnder(page, card) == sel then
+            table.insert(shown, card)
+            usesCol[math.clamp(card:GetAttribute("Col") or 1, 1, 2)] = true
+        end
     end
-    local count = 0
-    for _, card in ipairs(root.cards) do if Odyssey:OdysseyGroupOf(card) == sel then count += 1 end end
-    -- keep the two-column grid: a group whose sections all sit in one column is split over both
-    local split = not (usesCol[1] and usesCol[2]) and count >= 2
-    local two = count >= 2
+    -- keep the two-column grid: a top tab whose sections all sit in one column is split over both
+    local split = not (usesCol[1] and usesCol[2]) and #shown >= 2
     local k = 0
     for i, card in ipairs(root.cards) do
-        local on = Odyssey:OdysseyGroupOf(card) == sel
+        local on = table.find(shown, card) ~= nil
         card.Visible = on
         if on then
             k += 1
             local col = 1
             if split then col = (k % 2 == 1) and 1 or 2
-            elseif two then col = math.clamp(card:GetAttribute("Col") or 1, 1, 2) end
+            elseif #shown >= 2 then col = math.clamp(card:GetAttribute("Col") or 1, 1, 2) end
             card.Parent = root.cols[col]
             card.LayoutOrder = i
         end
+        card:SetAttribute("Wide", on and #shown == 1)
     end
-    root.cols[1].Size = two and UDim2.new(0.5, -3, 0, 0) or UDim2.new(1, 0, 0, 0)
-    root.cols[2].Visible = two and true or false
-    root.colsFrame.Visible = true
+    if #shown == 1 then
+        root.cols[1].Size = UDim2.new(1, 0, 0, 0)
+        root.cols[2].Visible = false
+    end
     page.frame.CanvasPosition = Vector2.new(0, 0)
     Odyssey:OdysseyFill(win, page)
+    for _, card in ipairs(root.cards) do Odyssey:OdysseyGrid(card) end
 end
 
 -- Put sections into their columns (also used by scripts after moving sections around)
@@ -581,9 +606,7 @@ function Odyssey:OdysseySection(page, name, col)
     if not name or name == "" then head.Visible = false end
     local list = Odyssey:OdysseyNew("Frame", {Name = "List", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 1, Parent = body})
-    local ll = Odyssey:OdysseyList(list, 5, Enum.FillDirection.Horizontal)
-    ll.Wraps = true
-    card:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() Odyssey:OdysseyGrid(card) end)
+    Odyssey:OdysseyList(list, 5)
     table.insert(page.root.cards, card)
     card.LayoutOrder = #page.root.cards
     table.insert(win._searchSections, card)
@@ -600,33 +623,50 @@ function Odyssey:OdysseySection(page, name, col)
         end)
     end
     -- new sections stay hidden until the tab sorts them (no flash of every section at once)
-    if page.subSel and Odyssey:OdysseyGroupOf(card) ~= page.subSel then card.Visible = false end
+    if page.subSel and Odyssey:OdysseyShownUnder(page, card) ~= page.subSel then card.Visible = false end
     Odyssey:OdysseyFill(win, page)
     return sec
 end
 
--- Side by side grid: in a wide section toggles, buttons and sliders go two per line;
--- dropdowns, labels and paragraphs always take the whole line
+local GRID_QUEUED = setmetatable({}, {__mode = "k"})
+
+-- Side by side grid: in a full-width section, toggles / buttons / sliders go two per line;
+-- dropdowns, labels and paragraphs keep the whole line
 function Odyssey:OdysseyGrid(card)
-    if not card or not card.Parent then return end
-    local s = 1
-    pcall(function()
-        local root = card
-        while root and root.Parent and not root:FindFirstChildOfClass("UIScale") do root = root.Parent end
-        local u = root and root:FindFirstChildOfClass("UIScale")
-        s = u and u.Scale or 1
-    end)
-    local wide = (card.AbsoluteSize.X / s) > 380
+    if not card or GRID_QUEUED[card] then return end
     local body = card:FindFirstChild("Body")
-    for _, list in ipairs(body and body:GetChildren() or {}) do
+    if not body then return end
+    local wide = card:GetAttribute("Wide") == true
+    for _, list in ipairs(body:GetChildren()) do
         if list.Name == "List" then
-            for _, row in ipairs(list:GetChildren()) do
-                if row:IsA("GuiObject") then
-                    local h = row.Size.Y.Offset
-                    if row:GetAttribute("Half") then
-                        row.Size = wide and UDim2.new(0.5, -3, 0, h) or UDim2.new(1, 0, 0, h)
+            -- take every row back out of its line
+            local rows = {}
+            for _, c in ipairs(list:GetChildren()) do
+                if c.Name == "GridLine" then
+                    for _, r in ipairs(c:GetChildren()) do
+                        if r:IsA("GuiObject") then r.Position = UDim2.new() r.Parent = list end
+                    end
+                    c:Destroy()
+                end
+            end
+            for _, c in ipairs(list:GetChildren()) do if c:IsA("GuiObject") then table.insert(rows, c) end end
+            table.sort(rows, function(x, y) return x.LayoutOrder < y.LayoutOrder end)
+            for _, r in ipairs(rows) do r.Size = UDim2.new(1, 0, 0, r.Size.Y.Offset) end
+            if wide then
+                local i = 1
+                while i <= #rows do
+                    local a, b = rows[i], rows[i + 1]
+                    if a:GetAttribute("Half") and b and b:GetAttribute("Half") and a.Visible and b.Visible then
+                        local line = Odyssey:OdysseyNew("Frame", {Name = "GridLine", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0),
+                            AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = a.LayoutOrder, Parent = list})
+                        a.Parent, b.Parent = line, line
+                        a.Size = UDim2.new(0.5, -3, 0, a.Size.Y.Offset)
+                        b.Size = UDim2.new(0.5, -3, 0, b.Size.Y.Offset)
+                        a.Position = UDim2.new(0, 0, 0, 0)
+                        b.Position = UDim2.new(0.5, 3, 0, 0)
+                        i += 2
                     else
-                        row.Size = UDim2.new(1, 0, 0, h)
+                        i += 1
                     end
                 end
             end
@@ -656,9 +696,14 @@ function Odyssey:OdysseyRow(sec, height, box, half)
         LayoutOrder = sec.n,
         Parent = sec.list,
     })
-    if half then
-        row:SetAttribute("Half", true)
-        Odyssey:OdysseyGrid(sec.card)
+    if half then row:SetAttribute("Half", true) end
+    local card = sec.card
+    if not GRID_QUEUED[card] then
+        GRID_QUEUED[card] = true
+        task.delay(0.25, function()
+            GRID_QUEUED[card] = nil
+            Odyssey:OdysseyGrid(card)
+        end)
     end
     if row:IsA("TextButton") then row.AutoButtonColor = false row.Text = "" end
     if box then
@@ -1477,7 +1522,7 @@ function Odyssey:OdysseySearch(win, q)
                     if p.frame == it.page then
                         win._searchBox.Text = ""
                         win._beforeSearch = nil
-                        if p.root and table.find(p.root.cards, it.sec) then p.subSel = Odyssey:OdysseyGroupOf(it.sec) end
+                        if p.root and table.find(p.root.cards, it.sec) then p.subSel = Odyssey:OdysseyShownUnder(p, it.sec) end
                         Odyssey:OdysseyOpenPage(win, p)
                         Odyssey:OdysseyApplySub(win, p)
                         Odyssey:OdysseyScrollTo(win, p, it.sec, it.row)
