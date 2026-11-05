@@ -322,17 +322,18 @@ function Odyssey:OdysseyBuildHeader(win)
     local items = {}
     if page.kind == "home" then
         items = {{"Overview", function() Odyssey:OdysseyHomeSub(win, "Overview") end, win._homeSub == "Overview"},
-            {"Updates", function() Odyssey:OdysseyHomeSub(win, "Updates") end, win._homeSub == "Updates"}}
+            {"Full Updates", function() Odyssey:OdysseyHomeSub(win, "Updates") end, win._homeSub == "Updates"},
+            {"Bug Fixes", function() Odyssey:OdysseyHomeSub(win, "Fixes") end, win._homeSub == "Fixes"}}
     elseif page.kind == "search" then
         items = {{"Search results", function() end, true}}
     else
         for _, card in ipairs(page.root.cards) do
-            if card.Visible then
-                local name = tostring(card.Name):gsub("^Section_", "")
-                if name ~= "" and not name:find("^_") then
-                    table.insert(items, {name, function() Odyssey:OdysseyScrollTo(win, page, card) end, false})
-                end
-            end
+            local name = tostring(card.Name):gsub("^Section_", "")
+            if name == "" then name = "More" end
+            table.insert(items, {name, function()
+                page.subSel = card
+                Odyssey:OdysseyApplySub(win, page)
+            end, card == page.subSel})
         end
     end
     local function paint(btn, on)
@@ -364,10 +365,8 @@ function Odyssey:OdysseyBuildHeader(win)
         b.MouseLeave:Connect(function() if b.BackgroundColor3 ~= C.hover then b.TextColor3 = C.muted end end)
         b.MouseButton1Click:Connect(function()
             it[2]()
-            if page.kind ~= "home" then
-                for _, o in ipairs(bar:GetChildren()) do
-                    if o:IsA("TextButton") then paint(o, o == b) end
-                end
+            for _, o in ipairs(bar:GetChildren()) do
+                if o:IsA("TextButton") then paint(o, o == b) end
             end
         end)
     end
@@ -486,6 +485,26 @@ function Odyssey:OdysseyFill(win, page)
     end)
 end
 
+-- Tabs in tabs: only the picked section shows, full width
+function Odyssey:OdysseyApplySub(win, page)
+    local root = page.root
+    if not root or #root.cards == 0 then return end
+    local sel = page.subSel
+    if not (sel and table.find(root.cards, sel)) then
+        sel = root.cards[1]
+        page.subSel = sel
+    end
+    for _, card in ipairs(root.cards) do
+        card.Visible = (card == sel)
+    end
+    sel.Parent = root.cols[1]
+    root.cols[1].Size = UDim2.new(1, 0, 0, 0)
+    root.cols[2].Visible = false
+    root.colsFrame.Visible = true
+    page.frame.CanvasPosition = Vector2.new(0, 0)
+    Odyssey:OdysseyFill(win, page)
+end
+
 -- Put sections into their columns (also used by scripts after moving sections around)
 function Odyssey:OdysseyRelayout(win, compact)
     for _, root in ipairs(win._roots) do
@@ -497,7 +516,7 @@ function Odyssey:OdysseyRelayout(win, compact)
         if root.colsFrame then root.colsFrame.Visible = #root.cards > 0 end
     end
     for _, p in ipairs(win._pages) do
-        if p.root then Odyssey:OdysseyFill(win, p) end
+        if p.root then Odyssey:OdysseyApplySub(win, p) end
     end
     if win._current then Odyssey:OdysseyBuildHeader(win) end
 end
@@ -534,6 +553,7 @@ function Odyssey:OdysseySection(page, name, col)
     page.lastByCol[col] = sec
     page.section = sec
     page.root.colsFrame.Visible = true
+    Odyssey:OdysseyApplySub(win, page)
     if win._current == page then Odyssey:OdysseyBuildHeader(win) end
     Odyssey:OdysseyFill(win, page)
     return sec
@@ -1296,7 +1316,12 @@ function Odyssey:OdysseyBuildHome(win)
         Visible = false, Parent = page.frame})
     Odyssey:OdysseyList(up, 8)
     win._updates = up
-    win._homeSubs = {Overview = ov, Updates = up}
+    local fx = up:Clone()
+    fx.Name = "Fixes"
+    fx.Parent = page.frame
+    win._fixes = fx
+    win._logs = {}
+    win._homeSubs = {Overview = ov, Updates = up, Fixes = fx}
     win._homeSub = "Overview"
     page.button = Odyssey:OdysseyTabButton(win, "Home", "🏠", 1)
     page.button.MouseButton1Click:Connect(function() Odyssey:OdysseyOpenPage(win, page) end)
@@ -1343,7 +1368,9 @@ function Odyssey:OdysseySearch(win, q)
                     if p.frame == it.page then
                         win._searchBox.Text = ""
                         win._beforeSearch = nil
+                        if p.root and table.find(p.root.cards, it.sec) then p.subSel = it.sec end
                         Odyssey:OdysseyOpenPage(win, p)
+                        Odyssey:OdysseyApplySub(win, p)
                         Odyssey:OdysseyScrollTo(win, p, it.sec, it.row)
                         break
                     end
@@ -1599,11 +1626,10 @@ function Odyssey:CreateWindow(o)
     local head = Odyssey:OdysseyNew("Frame", {Name = "Header", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 34), Parent = main})
     Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.border, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1), Parent = head})
     Odyssey:OdysseyDrag(head, root, win)
-    local headTabs = Odyssey:OdysseyNew("ScrollingFrame", {Name = "SectionTabs", BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0,
-        ScrollingDirection = Enum.ScrollingDirection.X, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.X,
-        Size = UDim2.new(1, -150, 1, -1), Position = UDim2.new(0, 8, 0, 0), Parent = head})
+    local headTabs = Odyssey:OdysseyNew("Frame", {Name = "SectionTabs", BackgroundTransparency = 1,
+        Size = UDim2.new(1, -150, 0, 22), Position = UDim2.new(0, 8, 0, 6), Parent = head})
     local hl = Odyssey:OdysseyList(headTabs, 6, Enum.FillDirection.Horizontal)
-    hl.VerticalAlignment = Enum.VerticalAlignment.Center
+    hl.Wraps = true
     win._headTabs = headTabs
     local right = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(0, 140, 1, 0), AnchorPoint = Vector2.new(1, 0),
         Position = UDim2.new(1, -8, 0, 0), Parent = head})
@@ -1624,6 +1650,16 @@ function Odyssey:CreateWindow(o)
     local content = Odyssey:OdysseyNew("Frame", {Name = "Content", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, -34 - 22),
         Position = UDim2.new(0, 0, 0, 34), Parent = main})
     win._content = content
+    hl:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        local sc = (win.Scale and win.Scale.Scale) or 1
+        local rows = math.max(22, math.ceil(hl.AbsoluteContentSize.Y / sc))
+        headTabs.Size = UDim2.new(1, -150, 0, rows)
+        local h = rows + 12
+        head.Size = UDim2.new(1, 0, 0, h)
+        right.Size = UDim2.new(0, 140, 0, 34)
+        content.Position = UDim2.new(0, 0, 0, h)
+        content.Size = UDim2.new(1, 0, 1, -h - 22)
+    end)
     -- footer
     local foot = Odyssey:OdysseyNew("Frame", {Name = "Footer", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(0, 0, 1, -22), Parent = main})
     Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.border, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 1), Parent = foot})
@@ -1768,10 +1804,10 @@ function Odyssey:CreateWindow(o)
         return out
     end
 
-    function win:CreateUpdateLog(u)
-        u = u or {}
+    -- one update card
+    local function logCard(parent, u, entries)
         local card = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.panel, Size = UDim2.new(1, -4, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
-            LayoutOrder = -(#win._updates:GetChildren()), Parent = win._updates})
+            LayoutOrder = -#win._logs, Parent = parent})
         Odyssey:OdysseyCorner(card, 6)
         Odyssey:OdysseyStroke(card)
         Odyssey:OdysseyPad(card, 8, 9, 8, 9)
@@ -1779,7 +1815,7 @@ function Odyssey:CreateWindow(o)
         Odyssey:OdysseyText({Text = tostring(u.Version or "Update") .. (u.Date and ("  ·  " .. tostring(u.Date)) or ""), Font = FONT_BOLD, Size = 12,
             Color = C.white, Order = 0, Parent = card})
         local TYPE_COLORS = {Added = C.good, Fixed = C.accent, Changed = C.warn, Removed = C.bad}
-        for i, e in ipairs(u.Entries or {}) do
+        for i, e in ipairs(entries) do
             local line = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = i, Parent = card})
             local pill = Odyssey:OdysseyNew("TextLabel", {BackgroundColor3 = TYPE_COLORS[e.Type] or C.accent, BackgroundTransparency = 0.8,
                 FontFace = FONT_BOLD, TextSize = 9, TextColor3 = TYPE_COLORS[e.Type] or C.accent, Text = tostring(e.Type or "Note"):upper(),
@@ -1788,6 +1824,34 @@ function Odyssey:CreateWindow(o)
             Odyssey:OdysseyText({Text = tostring(e.Text or ""), Size = 11, Wrap = true, Pos = UDim2.new(0, 66, 0, 0), Sz = UDim2.new(1, -66, 0, 0),
                 Auto = Enum.AutomaticSize.Y, Parent = line})
         end
+    end
+
+    -- empty page note
+    local function emptyNote(parent, text)
+        local old = parent:FindFirstChild("Empty")
+        local has = false
+        for _, c in ipairs(parent:GetChildren()) do if c:IsA("Frame") and c.Name ~= "Empty" then has = true end end
+        if has then
+            if old then old:Destroy() end
+        elseif not old then
+            local t = Odyssey:OdysseyText({Text = text, Size = 11, Color = C.muted, Parent = parent})
+            t.Name = "Empty"
+        end
+    end
+
+    -- Window:CreateUpdateLog({Version = "v1.1", Date = "Nov 5", Entries = {{Type = "Added", Text = "..."}, {Type = "Fixed", Text = "..."}}})
+    -- Kind = "Bug Fix" puts the whole log under Bug Fixes only
+    function win:CreateUpdateLog(u)
+        u = u or {}
+        table.insert(win._logs, u)
+        local fixes = {}
+        for _, e in ipairs(u.Entries or {}) do
+            if u.Kind == "Bug Fix" or tostring(e.Type) == "Fixed" then table.insert(fixes, e) end
+        end
+        if u.Kind ~= "Bug Fix" then logCard(win._updates, u, u.Entries or {}) end
+        if #fixes > 0 then logCard(win._fixes, u, fixes) end
+        emptyNote(win._updates, "No updates yet")
+        emptyNote(win._fixes, "No bug fixes yet")
     end
 
     function win:CreateDiscordButton(d)
@@ -1813,6 +1877,8 @@ function Odyssey:CreateWindow(o)
 
     -- Home first, Settings last; scripts can add their own settings with Window.ExtraSettings = function(tab) ... end
     Odyssey:OdysseyBuildHome(win)
+    emptyNote(win._updates, "No updates yet")
+    emptyNote(win._fixes, "No bug fixes yet")
     Odyssey:OdysseySettingsTab(win)
     Odyssey:OdysseyOpenPage(win, win._home)
 
