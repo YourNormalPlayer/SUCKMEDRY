@@ -11,7 +11,7 @@
 
 local Odyssey = {}
 Odyssey.Flags = {}
-Odyssey.Version = "2.0"
+Odyssey.Version = "2.0 · test 12"
 
 -- ========== Settings ==========
 
@@ -307,12 +307,14 @@ end
 
 -- Show / hide the window
 function Odyssey:OdysseySetOpen(win, open)
+    Odyssey:OdysseyAccess()
     win.open = open
     win.Root.Visible = open
 end
 
 -- Header tabs for the open page
 function Odyssey:OdysseyBuildHeader(win)
+    Odyssey:OdysseyAccess()
     local bar = win._headTabs
     for _, c in ipairs(bar:GetChildren()) do
         if c:IsA("TextButton") then c:Destroy() end
@@ -371,6 +373,7 @@ end
 
 -- Scroll a page to a section
 function Odyssey:OdysseyScrollTo(win, page, card, flash)
+    Odyssey:OdysseyAccess()
     local sf = page.frame
     task.defer(function()
         local s = (win.Scale and win.Scale.Scale) or 1
@@ -387,6 +390,7 @@ end
 
 -- Open a page
 function Odyssey:OdysseyOpenPage(win, page)
+    Odyssey:OdysseyAccess()
     for _, p in ipairs(win._pages) do
         p.frame.Visible = (p == page)
         if p.button then
@@ -441,6 +445,7 @@ end
 -- Keep both columns as tall as the page so panels reach the bottom.
 -- Works out the size once (no resetting first), so it never flickers or keeps resizing itself
 function Odyssey:OdysseyFill(win, page)
+    Odyssey:OdysseyAccess()
     local root = page.root
     if not root or page.filling then return end
     -- safety: if it keeps firing (layout fighting itself), back off instead of hogging the game
@@ -450,6 +455,7 @@ function Odyssey:OdysseyFill(win, page)
     if page.fillCount > 8 then return end
     page.filling = true
     task.delay(0.1, function()
+        Odyssey:OdysseyAccess()
         page.filling = false
         local sf = page.frame
         if not sf.Visible then return end
@@ -511,6 +517,7 @@ end
 
 -- Tabs in tabs: only the sections under the picked top tab show (in both columns when they use both)
 function Odyssey:OdysseyApplySub(win, page)
+    Odyssey:OdysseyAccess()
     local root = page.root
     if not root or #root.cards == 0 then return end
     -- every tab looks like Farm: sections in two columns side by side (never one long full-width list)
@@ -551,6 +558,7 @@ end
 
 -- Put sections into their columns (also used by scripts after moving sections around)
 function Odyssey:OdysseyRelayout(win, compact)
+    Odyssey:OdysseyAccess()
     for _, root in ipairs(win._roots) do
         for i, card in ipairs(root.cards) do
             card.Parent = root.cols[math.clamp(card:GetAttribute("Col") or 1, 1, 2)]
@@ -568,6 +576,7 @@ end
 
 -- New section card
 function Odyssey:OdysseySection(page, name, col)
+    Odyssey:OdysseyAccess()
     local win = page.win
     local card = Odyssey:OdysseyNew("Frame", {
         Name = "Section_" .. tostring(name or ""),
@@ -601,6 +610,7 @@ function Odyssey:OdysseySection(page, name, col)
     if not page.applyQueued then
         page.applyQueued = true
         task.delay(0.2, function()
+            Odyssey:OdysseyAccess()
             page.applyQueued = false
             Odyssey:OdysseyApplySub(win, page)
             if win._current == page then Odyssey:OdysseyBuildHeader(win) end
@@ -617,6 +627,7 @@ local GRID_QUEUED = setmetatable({}, {__mode = "k"})
 -- Side by side grid: in a full-width section, toggles / buttons / sliders go two per line;
 -- dropdowns, labels and paragraphs keep the whole line
 function Odyssey:OdysseyGrid(card)
+    Odyssey:OdysseyAccess()
     if not card or GRID_QUEUED[card] then return end
     local body = card:FindFirstChild("Body")
     if not body then return end
@@ -696,6 +707,7 @@ function Odyssey:OdysseyRow(sec, height, box, half)
     if not GRID_QUEUED[card] then
         GRID_QUEUED[card] = true
         task.delay(0.25, function()
+            Odyssey:OdysseyAccess()
             GRID_QUEUED[card] = nil
             Odyssey:OdysseyGrid(card)
         end)
@@ -1479,6 +1491,7 @@ end
 
 -- Switch Home sub page
 function Odyssey:OdysseyHomeSub(win, name)
+    Odyssey:OdysseyAccess()
     win._homeSub = name
     for n, f in pairs(win._homeSubs) do f.Visible = (n == name) end
     Odyssey:OdysseyBuildHeader(win)
@@ -1488,6 +1501,7 @@ end
 
 -- Search results
 function Odyssey:OdysseySearch(win, q)
+    Odyssey:OdysseyAccess()
     local page = win._searchPage
     for _, c in ipairs(page.frame:GetChildren()) do if c:IsA("TextButton") or c.Name == "Empty" then c:Destroy() end end
     q = tostring(q or ""):lower()
@@ -1536,6 +1550,7 @@ end
 
 -- Notification
 function Odyssey:OdysseyNotify(win, o)
+    Odyssey:OdysseyAccess()
     if type(o) ~= "table" then o = {Content = tostring(o)} end
     local holder = win._notes
     local color = NOTIFY_COLORS[o.Type] or C.accent
@@ -1577,6 +1592,7 @@ end
 
 -- Yes / no box
 function Odyssey:OdysseyConfirm(win, o)
+    Odyssey:OdysseyAccess()
     local dim = Odyssey:OdysseyNew("TextButton", {Text = "", AutoButtonColor = false, BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.45,
         Size = UDim2.new(1, 0, 1, 0), ZIndex = 50, Parent = win.Root})
     Odyssey:OdysseyCorner(dim, 6)
@@ -1882,6 +1898,7 @@ function Odyssey:CreateWindow(o)
 
     -- ---------- window methods ----------
     function win:CreateTab(t)
+        Odyssey:OdysseyAccess()
         t = t or {}
         local page = Odyssey:OdysseyPage(win, t, "tab")
         page.button = Odyssey:OdysseyTabButton(win, tostring(t.Name or "Tab"), t.Icon, 10 + #win._pages)
@@ -1898,6 +1915,7 @@ function Odyssey:CreateWindow(o)
     function win:CreateProgressWidget(p) return Odyssey:OdysseyProgressWidget(win, p or {}) end
 
     function win:SetHomeStats(list)
+        Odyssey:OdysseyAccess()
         for _, c in ipairs(win._statsFrame:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
         local out = {}
         for i, s in ipairs(list or {}) do
@@ -1933,6 +1951,7 @@ function Odyssey:CreateWindow(o)
     end
 
     function win:SetHomeCard(c)
+        Odyssey:OdysseyAccess()
         c = c or {}
         local body = win._sessionBody
         for _, k in ipairs(body:GetChildren()) do
@@ -1991,6 +2010,7 @@ function Odyssey:CreateWindow(o)
     -- Window:CreateUpdateLog({Version = "v1.1", Date = "Nov 5", Entries = {{Type = "Added", Text = "..."}, {Type = "Fixed", Text = "..."}}})
     -- Kind = "Bug Fix" puts the whole log under Bug Fixes only
     function win:CreateUpdateLog(u)
+        Odyssey:OdysseyAccess()
         u = u or {}
         table.insert(win._logs, u)
         local fixes = {}
@@ -2014,7 +2034,7 @@ function Odyssey:CreateWindow(o)
         win._badge = Odyssey:OdysseyBadge(win, badgeHolder, t)
     end
 
-    function win:_relayoutTabs(compact) Odyssey:OdysseyRelayout(win, compact) end
+    function win:_relayoutTabs(compact) Odyssey:OdysseyAccess() Odyssey:OdysseyRelayout(win, compact) end
 
     function win:Destroy()
         if win._dead then return end
