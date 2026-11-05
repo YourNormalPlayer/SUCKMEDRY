@@ -1,0 +1,1814 @@
+--[[
+    Odyssey UI · v2.0 · Ocean Steel
+    Drop-in for the old Holo library: same calls, new look.
+
+    local Holo = loadstring(game:HttpGet(UI_URL))()
+    local Window = Holo:CreateWindow({Name = "Odyssey", Subtitle = "Bee Swarm Simulator", Tier = "Free",
+        ToggleKey = Enum.KeyCode.RightControl, Folder = "Bee Swarm Simulator", Logo = "rbxassetid://0"})
+
+    Tier: "Free" | "Paid" | "Tester" | "Owner"
+]]
+
+local Odyssey = {}
+Odyssey.Flags = {}
+Odyssey.Version = "2.0"
+
+-- ========== Settings ==========
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local LP = Players.LocalPlayer
+
+-- Ocean Steel
+local C = {
+    side = Color3.fromRGB(32, 46, 60),      -- sidebar
+    main = Color3.fromRGB(64, 92, 119),     -- page
+    panel = Color3.fromRGB(48, 69, 90),     -- sections
+    item = Color3.fromRGB(40, 58, 76),      -- boxes inside sections
+    border = Color3.fromRGB(68, 89, 111),
+    hover = Color3.fromRGB(52, 71, 91),     -- active tab
+    text = Color3.fromRGB(237, 240, 243),
+    white = Color3.fromRGB(255, 255, 255),
+    muted = Color3.fromRGB(199, 209, 219),
+    dim = Color3.fromRGB(150, 165, 180),
+    accent = Color3.fromRGB(191, 227, 255),
+    dark = Color3.fromRGB(15, 28, 42),
+    good = Color3.fromRGB(143, 240, 184),
+    warn = Color3.fromRGB(245, 200, 76),
+    bad = Color3.fromRGB(255, 122, 122),
+    danger = Color3.fromRGB(138, 11, 11),
+}
+
+-- badge per user type
+local TIERS = {
+    Free = {text = "FREE", bg = C.accent, fg = C.dark},
+    Paid = {text = "PAID", bg = Color3.fromRGB(245, 200, 76), fg = C.dark},
+    Tester = {text = "TESTER", rainbow = true, fg = C.dark},
+    Owner = {text = "OWNER", bg = Color3.fromRGB(138, 11, 11), fg = C.white},
+}
+
+local NOTIFY_COLORS = {Success = C.good, Warning = C.warn, Error = C.bad, Info = C.accent}
+
+local SHOP_TEXT = "We sell items, pets and in-game currency for popular Roblox games at fair prices. New stock is added regularly, and every order is handled through our Discord."
+local DISCORD_TEXT = "Updates, bug reports and support. Odyssey Paid is out now: get it through the Discord."
+
+local W, H = 600, 440
+local SIDE_W = 150
+
+local FONT, FONT_MED, FONT_BOLD
+do
+    local ok = pcall(function()
+        FONT = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular)
+        FONT_MED = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Medium)
+        FONT_BOLD = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Bold)
+    end)
+    if not ok then
+        FONT = Font.fromEnum(Enum.Font.Gotham)
+        FONT_MED = Font.fromEnum(Enum.Font.GothamMedium)
+        FONT_BOLD = Font.fromEnum(Enum.Font.GothamBold)
+    end
+end
+
+-- ========== Functions · Helpers ==========
+
+-- New instance with properties
+function Odyssey:OdysseyNew(class, props, kids)
+    local o = Instance.new(class)
+    for k, v in pairs(props or {}) do
+        if k ~= "Parent" then o[k] = v end
+    end
+    for _, k in ipairs(kids or {}) do k.Parent = o end
+    if props and props.Parent then o.Parent = props.Parent end
+    return o
+end
+
+-- Round corners
+function Odyssey:OdysseyCorner(o, r)
+    return Odyssey:OdysseyNew("UICorner", {CornerRadius = UDim.new(0, r or 6), Parent = o})
+end
+
+-- Border line
+function Odyssey:OdysseyStroke(o, color, t)
+    return Odyssey:OdysseyNew("UIStroke", {Color = color or C.border, Thickness = t or 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = o})
+end
+
+-- Padding
+function Odyssey:OdysseyPad(o, t, r, b, l)
+    return Odyssey:OdysseyNew("UIPadding", {PaddingTop = UDim.new(0, t or 0), PaddingRight = UDim.new(0, r or t or 0),
+        PaddingBottom = UDim.new(0, b or t or 0), PaddingLeft = UDim.new(0, l or r or t or 0), Parent = o})
+end
+
+-- List layout
+function Odyssey:OdysseyList(o, gap, dir)
+    return Odyssey:OdysseyNew("UIListLayout", {Padding = UDim.new(0, gap or 0), SortOrder = Enum.SortOrder.LayoutOrder,
+        FillDirection = dir or Enum.FillDirection.Vertical, Parent = o})
+end
+
+-- Text label
+function Odyssey:OdysseyText(props)
+    local t = Odyssey:OdysseyNew("TextLabel", {
+        BackgroundTransparency = 1,
+        FontFace = props.Font or FONT,
+        TextSize = props.Size or 11,
+        TextColor3 = props.Color or C.text,
+        Text = props.Text or "",
+        TextXAlignment = props.AlignX or Enum.TextXAlignment.Left,
+        TextYAlignment = props.AlignY or Enum.TextYAlignment.Center,
+        TextWrapped = props.Wrap or false,
+        TextTruncate = props.Wrap and Enum.TextTruncate.None or Enum.TextTruncate.AtEnd,
+        RichText = props.Rich or false,
+        Size = props.Sz or UDim2.new(1, 0, 0, (props.Size or 11) + 4),
+        AutomaticSize = props.Auto or Enum.AutomaticSize.None,
+        Position = props.Pos or UDim2.new(),
+        AnchorPoint = props.Anchor or Vector2.new(),
+        LayoutOrder = props.Order or 0,
+        ZIndex = props.Z or 1,
+        Name = props.Name or "Label",
+        Parent = props.Parent,
+    })
+    return t
+end
+
+-- Quick tween
+function Odyssey:OdysseyTween(o, t, props)
+    local tw = TweenService:Create(o, TweenInfo.new(t, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props)
+    tw:Play()
+    return tw
+end
+
+-- Safe call (errors go to the console, never stop the UI)
+function Odyssey:OdysseySafe(fn, ...)
+    if type(fn) ~= "function" then return end
+    local ok, err = pcall(fn, ...)
+    if not ok then warn("[Odyssey UI] " .. tostring(err)) end
+end
+
+-- Where the UI lives
+function Odyssey:OdysseyGuiParent()
+    local ok, h = pcall(function() return gethui and gethui() end)
+    if ok and h then return h end
+    local ok2, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok2 and cg then
+        local test = pcall(function() local f = Instance.new("Folder") f.Parent = cg f:Destroy() end)
+        if test then return cg end
+    end
+    return LP:WaitForChild("PlayerGui")
+end
+
+-- Drag a frame by a handle
+function Odyssey:OdysseyDrag(handle, target, win)
+    local dragging, start, startPos
+    handle.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging, start, startPos = true, i.Position, target.Position
+            i.Changed:Connect(function()
+                if i.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    local c = UIS.InputChanged:Connect(function(i)
+        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            local d = i.Position - start
+            target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end)
+    if win then table.insert(win._conns, c) end
+end
+
+-- Key name text
+function Odyssey:OdysseyKeyName(k)
+    if typeof(k) == "EnumItem" then return k.Name end
+    return tostring(k or "None")
+end
+
+-- Key from name
+function Odyssey:OdysseyKeyFrom(v)
+    if typeof(v) == "EnumItem" then return v end
+    local ok, k = pcall(function() return Enum.KeyCode[tostring(v)] end)
+    return ok and k or nil
+end
+
+-- Copy of a list
+function Odyssey:OdysseyCopy(t)
+    local o = {}
+    for i, v in ipairs(type(t) == "table" and t or {}) do o[i] = v end
+    return o
+end
+
+-- ========== Functions · Config ==========
+
+-- Config file path
+function Odyssey:OdysseyConfigPath(win)
+    return "Odyssey Hub/" .. tostring(win.folder) .. "/Config.json"
+end
+
+-- Load saved settings
+function Odyssey:OdysseyLoadConfig(win)
+    local function read(path)
+        local ok, data = pcall(function()
+            if isfile and isfile(path) then return HttpService:JSONDecode(readfile(path)) end
+        end)
+        return ok and type(data) == "table" and data or nil
+    end
+    local data = read(Odyssey:OdysseyConfigPath(win))
+    if not data and win.oldConfig then data = read(win.oldConfig) end
+    for k, v in pairs(data or {}) do Odyssey.Flags[k] = v end
+    win._loaded = data or {}
+end
+
+-- Save settings (a moment after the last change)
+function Odyssey:OdysseySaveConfig(win)
+    win._saveGen = (win._saveGen or 0) + 1
+    local gen = win._saveGen
+    task.delay(0.6, function()
+        if gen ~= win._saveGen then return end
+        pcall(function()
+            if not (writefile and makefolder) then return end
+            if isfolder and not isfolder("Odyssey Hub") then makefolder("Odyssey Hub") end
+            local dir = "Odyssey Hub/" .. tostring(win.folder)
+            if isfolder and not isfolder(dir) then makefolder(dir) end
+            local out = {}
+            for k, v in pairs(Odyssey.Flags) do
+                local t = typeof(v)
+                if t == "string" or t == "number" or t == "boolean" or t == "table" then out[k] = v
+                elseif t == "EnumItem" then out[k] = v.Name end
+            end
+            writefile(Odyssey:OdysseyConfigPath(win), HttpService:JSONEncode(out))
+        end)
+    end)
+end
+
+-- Set a flag and save
+function Odyssey:OdysseySetFlag(win, flag, v)
+    if not flag then return end
+    Odyssey.Flags[flag] = v
+    Odyssey:OdysseySaveConfig(win)
+end
+
+-- Saved value for a flag (nil = none saved)
+function Odyssey:OdysseySaved(win, flag)
+    if not flag then return nil end
+    return win._loaded and win._loaded[flag]
+end
+
+-- ========== Functions · Window ==========
+
+-- Tier badge
+function Odyssey:OdysseyBadge(win, parent, tier)
+    local info = TIERS[tier] or TIERS.Free
+    local b = Odyssey:OdysseyNew("TextLabel", {
+        Name = "Badge",
+        BackgroundColor3 = info.bg or C.white,
+        FontFace = FONT_BOLD,
+        TextSize = 10,
+        TextColor3 = info.fg,
+        Text = info.text,
+        AutomaticSize = Enum.AutomaticSize.X,
+        Size = UDim2.new(0, 0, 0, 18),
+        Parent = parent,
+    })
+    Odyssey:OdysseyCorner(b, 4)
+    Odyssey:OdysseyPad(b, 1, 7, 0, 8)
+    if info.rainbow then
+        local g = Odyssey:OdysseyNew("UIGradient", {Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 95, 95)),
+            ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 179, 71)),
+            ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 243, 107)),
+            ColorSequenceKeypoint.new(0.6, Color3.fromRGB(107, 255, 143)),
+            ColorSequenceKeypoint.new(0.8, Color3.fromRGB(95, 201, 255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(178, 139, 255)),
+        }), Parent = b})
+        local t0 = os.clock()
+        table.insert(win._conns, RunService.RenderStepped:Connect(function()
+            g.Offset = Vector2.new(((os.clock() - t0) * 0.25) % 2 - 1, 0)
+        end))
+    end
+    return b
+end
+
+-- Show / hide the window
+function Odyssey:OdysseySetOpen(win, open)
+    win.open = open
+    win.Root.Visible = open
+end
+
+-- Header tabs for the open page
+function Odyssey:OdysseyBuildHeader(win)
+    local bar = win._headTabs
+    for _, c in ipairs(bar:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+    local page = win._current
+    if not page then return end
+    local items = {}
+    if page.kind == "home" then
+        items = {{"Overview", function() Odyssey:OdysseyHomeSub(win, "Overview") end, win._homeSub == "Overview"},
+            {"Updates", function() Odyssey:OdysseyHomeSub(win, "Updates") end, win._homeSub == "Updates"},
+            {"Community", function() Odyssey:OdysseyHomeSub(win, "Community") end, win._homeSub == "Community"}}
+    elseif page.kind == "search" then
+        items = {{"Search results", function() end, true}}
+    else
+        for _, card in ipairs(page.root.cards) do
+            if card.Visible then
+                local name = tostring(card.Name):gsub("^Section_", "")
+                if name ~= "" and not name:find("^_") then
+                    table.insert(items, {name, function() Odyssey:OdysseyScrollTo(win, page, card) end, false})
+                end
+            end
+        end
+    end
+    for i, it in ipairs(items) do
+        local b = Odyssey:OdysseyNew("TextButton", {
+            Name = "Head_" .. it[1],
+            AutoButtonColor = false,
+            BackgroundTransparency = 1,
+            FontFace = it[3] and FONT_MED or FONT,
+            TextSize = 11,
+            TextColor3 = it[3] and C.white or C.muted,
+            Text = it[1],
+            AutomaticSize = Enum.AutomaticSize.X,
+            Size = UDim2.new(0, 0, 1, 0),
+            LayoutOrder = i,
+            Parent = bar,
+        })
+        Odyssey:OdysseyPad(b, 0, 9, 0, 9)
+        if it[3] then
+            Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.accent, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 2),
+                Position = UDim2.new(0, 0, 1, -2), Parent = b})
+        end
+        b.MouseButton1Click:Connect(function()
+            it[2]()
+            if page.kind ~= "home" then
+                for _, o in ipairs(bar:GetChildren()) do
+                    if o:IsA("TextButton") then
+                        o.TextColor3 = (o == b) and C.white or C.muted
+                        o.FontFace = (o == b) and FONT_MED or FONT
+                        local line = o:FindFirstChild("Line")
+                        if line then line:Destroy() end
+                    end
+                end
+                Odyssey:OdysseyNew("Frame", {Name = "Line", BackgroundColor3 = C.accent, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 2),
+                    Position = UDim2.new(0, 0, 1, -2), Parent = b})
+            end
+        end)
+    end
+end
+
+-- Scroll a page to a section
+function Odyssey:OdysseyScrollTo(win, page, card, flash)
+    local sf = page.frame
+    task.defer(function()
+        local s = (win.Scale and win.Scale.Scale) or 1
+        local y = (card.AbsolutePosition.Y - sf.AbsolutePosition.Y) / s + sf.CanvasPosition.Y
+        Odyssey:OdysseyTween(sf, 0.25, {CanvasPosition = Vector2.new(0, math.max(0, y - 6))})
+        if flash then
+            local st = flash:FindFirstChildOfClass("UIStroke") or Odyssey:OdysseyStroke(flash, C.accent)
+            local old = st.Color
+            st.Color = C.accent
+            task.delay(1.2, function() pcall(function() st.Color = old end) end)
+        end
+    end)
+end
+
+-- Open a page
+function Odyssey:OdysseyOpenPage(win, page)
+    for _, p in ipairs(win._pages) do
+        p.frame.Visible = (p == page)
+        if p.button then
+            local on = (p == page)
+            p.button.BackgroundTransparency = on and 0 or 1
+            p.button.Label.TextColor3 = on and C.white or C.muted
+        end
+    end
+    win._searchPage.frame.Visible = (page == win._searchPage)
+    win._current = page
+    Odyssey:OdysseyBuildHeader(win)
+end
+
+-- Sidebar button
+function Odyssey:OdysseyTabButton(win, name, icon, order)
+    local b = Odyssey:OdysseyNew("TextButton", {
+        Name = "Tab_" .. name,
+        AutoButtonColor = false,
+        BackgroundColor3 = C.hover,
+        BackgroundTransparency = 1,
+        Text = "",
+        Size = UDim2.new(1, 0, 0, 24),
+        LayoutOrder = order,
+        Parent = win._tabList,
+    })
+    Odyssey:OdysseyCorner(b, 4)
+    Odyssey:OdysseyText({Name = "Icon", Text = icon or "•", Size = 12, Sz = UDim2.new(0, 18, 1, 0), Pos = UDim2.new(0, 6, 0, 0),
+        AlignX = Enum.TextXAlignment.Center, Parent = b})
+    Odyssey:OdysseyText({Name = "Label", Text = name, Size = 12, Color = C.muted, Sz = UDim2.new(1, -32, 1, 0), Pos = UDim2.new(0, 28, 0, 0), Parent = b})
+    b.MouseEnter:Connect(function() if win._current and win._current.button ~= b then b.BackgroundTransparency = 0.6 end end)
+    b.MouseLeave:Connect(function() if win._current and win._current.button ~= b then b.BackgroundTransparency = 1 end end)
+    return b
+end
+
+-- Sort the sidebar: Home, game tabs by Group then Order, Settings last
+function Odyssey:OdysseySortTabs(win)
+    local rank = {Game = 0, Player = 5}
+    local list = {}
+    for _, p in ipairs(win._pages) do
+        if p.kind == "tab" and not p.settings then table.insert(list, p) end
+    end
+    table.sort(list, function(a, b)
+        local ga, gb = rank[a.group] or 1, rank[b.group] or 1
+        if ga ~= gb then return ga < gb end
+        if a.order ~= b.order then return a.order < b.order end
+        return a.idx < b.idx
+    end)
+    for i, p in ipairs(list) do p.button.LayoutOrder = 10 + i end
+end
+
+-- Keep both columns as tall as the page so panels reach the bottom
+function Odyssey:OdysseyFill(win, page)
+    local root = page.root
+    if not root or page.filling then return end
+    page.filling = true
+    task.delay(0.05, function()
+        page.filling = false
+        local sf = page.frame
+        local s = (win.Scale and win.Scale.Scale) or 1
+        local avail = sf.AbsoluteSize.Y / s - 14
+        for _, col in ipairs(root.cols) do
+            local last, total = nil, 0
+            local kids = {}
+            for _, card in ipairs(col:GetChildren()) do
+                if card:IsA("Frame") and card.Visible then table.insert(kids, card) end
+            end
+            table.sort(kids, function(a, b) return a.LayoutOrder < b.LayoutOrder end)
+            for _, card in ipairs(kids) do
+                local f = card:FindFirstChild("Fill", true)
+                if f then f.Size = UDim2.new(1, 0, 0, 0) end
+            end
+            task.wait()
+            for _, card in ipairs(kids) do total += card.AbsoluteSize.Y / s + 6 last = card end
+            if last then
+                local body = last:FindFirstChild("Body")
+                local f = body and body:FindFirstChild("Fill")
+                if body and not f then
+                    f = Odyssey:OdysseyNew("Frame", {Name = "Fill", BackgroundTransparency = 1, LayoutOrder = 99999, Size = UDim2.new(1, 0, 0, 0), Parent = body})
+                end
+                if f then f.Size = UDim2.new(1, 0, 0, math.max(0, avail - total)) end
+            end
+        end
+    end)
+end
+
+-- Put sections into their columns (also used by scripts after moving sections around)
+function Odyssey:OdysseyRelayout(win, compact)
+    for _, root in ipairs(win._roots) do
+        for i, card in ipairs(root.cards) do
+            local col = compact and 1 or math.clamp(card:GetAttribute("Col") or 1, 1, 2)
+            card.Parent = root.cols[col]
+            card.LayoutOrder = i
+        end
+        if root.colsFrame then root.colsFrame.Visible = #root.cards > 0 end
+    end
+    for _, p in ipairs(win._pages) do
+        if p.root then Odyssey:OdysseyFill(win, p) end
+    end
+    if win._current then Odyssey:OdysseyBuildHeader(win) end
+end
+
+-- ========== Functions · Sections and elements ==========
+
+-- New section card
+function Odyssey:OdysseySection(page, name, col)
+    local win = page.win
+    local card = Odyssey:OdysseyNew("Frame", {
+        Name = "Section_" .. tostring(name or ""),
+        BackgroundColor3 = C.panel,
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Parent = page.root.cols[col],
+    })
+    card:SetAttribute("Col", col)
+    Odyssey:OdysseyCorner(card, 6)
+    Odyssey:OdysseyStroke(card)
+    local body = Odyssey:OdysseyNew("Frame", {Name = "Body", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y, Parent = card})
+    Odyssey:OdysseyPad(body, 8, 9, 8, 9)
+    Odyssey:OdysseyList(body, 5)
+    local head = Odyssey:OdysseyNew("Frame", {Name = "Head", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 14), LayoutOrder = 0, Parent = body})
+    Odyssey:OdysseyText({Text = tostring(name or ""):upper(), Font = FONT_BOLD, Size = 10, Color = C.muted, Sz = UDim2.new(1, 0, 1, 0), Parent = head})
+    if not name or name == "" then head.Visible = false end
+    local list = Odyssey:OdysseyNew("Frame", {Name = "List", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 1, Parent = body})
+    Odyssey:OdysseyList(list, 5)
+    table.insert(page.root.cards, card)
+    card.LayoutOrder = #page.root.cards
+    table.insert(win._searchSections, card)
+    local sec = {card = card, list = list, page = page, col = col, n = 0, name = name}
+    page.lastByCol[col] = sec
+    page.section = sec
+    page.root.colsFrame.Visible = true
+    if win._current == page then Odyssey:OdysseyBuildHeader(win) end
+    Odyssey:OdysseyFill(win, page)
+    return sec
+end
+
+-- Which section a new element goes in
+function Odyssey:OdysseyTarget(page, opts)
+    local want = (type(opts) == "table" and opts.Side == "Right") and 2 or ((type(opts) == "table" and opts.Side == "Left") and 1 or nil)
+    if want then
+        if page.section and page.section.col == want then return page.section end
+        return page.lastByCol[want] or Odyssey:OdysseySection(page, "", want)
+    end
+    return page.section or Odyssey:OdysseySection(page, "", page.col)
+end
+
+-- Element row frame
+function Odyssey:OdysseyRow(sec, height, box)
+    sec.n += 1
+    local row = Odyssey:OdysseyNew(box and "TextButton" or "Frame", {
+        Name = "Row",
+        BackgroundColor3 = C.item,
+        BackgroundTransparency = box and 0 or 1,
+        Size = UDim2.new(1, 0, 0, height or 26),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        LayoutOrder = sec.n,
+        Parent = sec.list,
+    })
+    if row:IsA("TextButton") then row.AutoButtonColor = false row.Text = "" end
+    if box then
+        Odyssey:OdysseyCorner(row, 4)
+        Odyssey:OdysseyStroke(row)
+    end
+    return row
+end
+
+-- Name + description block on the left of a row
+function Odyssey:OdysseyNameBlock(row, name, desc, rightSpace)
+    local holder = Odyssey:OdysseyNew("Frame", {Name = "Text", BackgroundTransparency = 1, Size = UDim2.new(1, -(rightSpace or 0), 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y, Parent = row})
+    Odyssey:OdysseyList(holder, 1)
+    Odyssey:OdysseyPad(holder, 5, 0, 5, 8)
+    local title = Odyssey:OdysseyText({Name = "Title", Text = tostring(name or ""), Size = 12, Color = C.text, Order = 1,
+        Sz = UDim2.new(1, -8, 0, 15), Parent = holder})
+    local d = Odyssey:OdysseyText({Name = "Desc", Text = tostring(desc or ""), Size = 10, Color = C.muted, Wrap = true, Order = 2,
+        Sz = UDim2.new(1, -8, 0, 0), Auto = Enum.AutomaticSize.Y, Parent = holder})
+    d.Visible = desc ~= nil and desc ~= ""
+    return title, d
+end
+
+-- Search entry
+function Odyssey:OdysseyIndex(sec, row, name, desc)
+    table.insert(sec.page.win._searchItems, {name = tostring(name or ""), desc = tostring(desc or ""), row = row, sec = sec.card, page = sec.page.frame})
+end
+
+-- Shared element methods
+function Odyssey:OdysseyBase(el, row, descLabel)
+    el.Instance = row
+    function el:SetDescription(t)
+        if descLabel then
+            descLabel.Text = tostring(t or "")
+            descLabel.Visible = t ~= nil and t ~= ""
+        end
+    end
+    function el:SetVisible(v) row.Visible = v ~= false end
+    function el:Destroy() row:Destroy() end
+    return el
+end
+
+-- Toggle
+function Odyssey:OdysseyToggle(page, o)
+    local win = page.win
+    local sec = Odyssey:OdysseyTarget(page, o)
+    local row = Odyssey:OdysseyRow(sec, 28, true)
+    local _, desc = Odyssey:OdysseyNameBlock(row, o.Name, o.Description, 44)
+    local track = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.dark, Size = UDim2.new(0, 30, 0, 16), AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -8, 0.5, 0), Parent = row})
+    Odyssey:OdysseyCorner(track, 8)
+    Odyssey:OdysseyStroke(track)
+    local knob = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.muted, Size = UDim2.new(0, 12, 0, 12), AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.new(0, 2, 0.5, 0), Parent = track})
+    Odyssey:OdysseyCorner(knob, 6)
+    local el = {Value = false, CurrentValue = false}
+    local busy = false
+    local function draw()
+        Odyssey:OdysseyTween(track, 0.15, {BackgroundColor3 = el.Value and C.accent or C.dark})
+        Odyssey:OdysseyTween(knob, 0.15, {Position = el.Value and UDim2.new(1, -14, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
+            BackgroundColor3 = el.Value and C.white or C.muted})
+    end
+    function el:Set(v, quiet)
+        if type(v) == "table" then v = v.CurrentValue end
+        v = v == true
+        el.Value, el.CurrentValue = v, v
+        draw()
+        Odyssey:OdysseySetFlag(win, o.Flag, v)
+        if not quiet and not busy then
+            busy = true
+            Odyssey:OdysseySafe(o.Callback, v)
+            busy = false
+        end
+    end
+    function el:GetValue() return el.Value end
+    row.MouseButton1Click:Connect(function() el:Set(not el.Value) end)
+    Odyssey:OdysseyBase(el, row, desc)
+    Odyssey:OdysseyIndex(sec, row, o.Name, o.Description)
+    local saved = Odyssey:OdysseySaved(win, o.Flag)
+    if saved ~= nil then el:Set(saved == true)
+    elseif o.CurrentValue then el:Set(true)
+    else el.Value = false if o.Flag then Odyssey.Flags[o.Flag] = false end draw() end
+    return el
+end
+
+-- Button
+function Odyssey:OdysseyButton(page, o)
+    local sec = Odyssey:OdysseyTarget(page, o)
+    local row
+    -- two buttons side by side
+    if o.SameRow and sec.lastButton and sec.lastButton.Parent then
+        local prev = sec.lastButton
+        local pair = prev.Parent:IsA("Frame") and prev.Parent.Name == "Pair" and prev.Parent or nil
+        if not pair then
+            pair = Odyssey:OdysseyNew("Frame", {Name = "Pair", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = prev.LayoutOrder, Parent = sec.list})
+            Odyssey:OdysseyNew("UIGridLayout", {CellPadding = UDim2.new(0, 5, 0, 5), CellSize = UDim2.new(0.5, -3, 0, 30),
+                SortOrder = Enum.SortOrder.LayoutOrder, Parent = pair})
+            prev.Parent = pair
+        end
+        row = Odyssey:OdysseyNew("TextButton", {Name = "Row", BackgroundColor3 = C.item, AutoButtonColor = false, Text = "",
+            Size = UDim2.new(1, 0, 0, 30), LayoutOrder = 2, Parent = pair})
+        Odyssey:OdysseyCorner(row, 4)
+        Odyssey:OdysseyStroke(row)
+    else
+        row = Odyssey:OdysseyRow(sec, 28, true)
+    end
+    local base = (o.Style == "Primary" and C.accent) or (o.Style == "Danger" and C.danger) or C.item
+    local fg = (o.Style == "Primary" and C.dark) or C.text
+    row.BackgroundColor3 = base
+    local title, desc = Odyssey:OdysseyNameBlock(row, o.Name, o.Description, 20)
+    title.TextColor3 = fg
+    if o.Style == "Primary" then title.FontFace = FONT_BOLD desc.TextColor3 = C.dark end
+    Odyssey:OdysseyText({Text = "›", Size = 14, Color = o.Style == "Primary" and C.dark or C.muted, Sz = UDim2.new(0, 14, 0, 14),
+        Anchor = Vector2.new(1, 0.5), Pos = UDim2.new(1, -6, 0.5, 0), AlignX = Enum.TextXAlignment.Center, Parent = row})
+    row.MouseEnter:Connect(function() Odyssey:OdysseyTween(row, 0.1, {BackgroundColor3 = base:Lerp(C.white, 0.08)}) end)
+    row.MouseLeave:Connect(function() Odyssey:OdysseyTween(row, 0.1, {BackgroundColor3 = base}) end)
+    row.MouseButton1Click:Connect(function()
+        Odyssey:OdysseyTween(row, 0.05, {BackgroundColor3 = base:Lerp(C.white, 0.2)})
+        task.delay(0.1, function() Odyssey:OdysseyTween(row, 0.15, {BackgroundColor3 = base}) end)
+        task.spawn(function() Odyssey:OdysseySafe(o.Callback) end)
+    end)
+    sec.lastButton = row
+    local el = {}
+    function el:Set(v)
+        if type(v) == "table" then
+            if v.Name then title.Text = tostring(v.Name) end
+            if v.Description then el:SetDescription(v.Description) end
+        elseif v ~= nil then title.Text = tostring(v) end
+    end
+    Odyssey:OdysseyBase(el, row, desc)
+    Odyssey:OdysseyIndex(sec, row, o.Name, o.Description)
+    return el
+end
+
+-- Label
+function Odyssey:OdysseyLabel(page, o)
+    if type(o) ~= "table" then o = {Text = o} end
+    local sec = Odyssey:OdysseyTarget(page, o)
+    local row = Odyssey:OdysseyRow(sec, 0, false)
+    local t = Odyssey:OdysseyText({Text = tostring(o.Text or o.Name or ""), Size = 11, Color = C.muted, Wrap = true, Rich = true,
+        Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Parent = row})
+    Odyssey:OdysseyPad(row, 2, 2, 2, 2)
+    local el = {}
+    function el:Set(v)
+        if type(v) == "table" then v = v.Text or v.Content or v.Name end
+        t.Text = tostring(v or "")
+    end
+    Odyssey:OdysseyBase(el, row, nil)
+    Odyssey:OdysseyIndex(sec, row, o.Text, "")
+    return el
+end
+
+-- Paragraph
+function Odyssey:OdysseyParagraph(page, o)
+    local sec = Odyssey:OdysseyTarget(page, o)
+    local row = Odyssey:OdysseyRow(sec, 0, true)
+    local holder = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Parent = row})
+    Odyssey:OdysseyList(holder, 2)
+    Odyssey:OdysseyPad(holder, 6, 8, 6, 8)
+    local title = Odyssey:OdysseyText({Text = tostring(o.Title or ""), Font = FONT_MED, Size = 12, Order = 1, Parent = holder})
+    local body = Odyssey:OdysseyText({Text = tostring(o.Content or ""), Size = 10, Color = C.muted, Wrap = true, Rich = true, Order = 2,
+        Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Parent = holder})
+    title.Visible = (o.Title or "") ~= ""
+    local el = {}
+    function el:Set(v)
+        if type(v) == "table" then
+            if v.Title ~= nil then title.Text = tostring(v.Title) title.Visible = v.Title ~= "" end
+            if v.Content ~= nil then body.Text = tostring(v.Content) end
+        else
+            body.Text = tostring(v or "")
+        end
+    end
+    Odyssey:OdysseyBase(el, row, body)
+    Odyssey:OdysseyIndex(sec, row, o.Title, o.Content)
+    return el
+end
+
+-- Slider
+function Odyssey:OdysseySlider(page, o)
+    local win = page.win
+    local sec = Odyssey:OdysseyTarget(page, o)
+    local row = Odyssey:OdysseyRow(sec, 40, true)
+    local lo, hi = (o.Range and o.Range[1]) or 0, (o.Range and o.Range[2]) or 100
+    local inc = tonumber(o.Increment) or 1
+    local holder = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Parent = row})
+    Odyssey:OdysseyList(holder, 4)
+    Odyssey:OdysseyPad(holder, 6, 8, 8, 8)
+    local top = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 15), LayoutOrder = 1, Parent = holder})
+    Odyssey:OdysseyText({Text = tostring(o.Name or ""), Size = 12, Sz = UDim2.new(1, -70, 1, 0), Parent = top})
+    local val = Odyssey:OdysseyText({Text = "", Size = 11, Color = C.accent, Font = FONT_MED, AlignX = Enum.TextXAlignment.Right,
+        Sz = UDim2.new(0, 70, 1, 0), Anchor = Vector2.new(1, 0), Pos = UDim2.new(1, 0, 0, 0), Parent = top})
+    local desc = Odyssey:OdysseyText({Text = tostring(o.Description or ""), Size = 10, Color = C.muted, Wrap = true, Order = 2,
+        Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Parent = holder})
+    desc.Visible = (o.Description or "") ~= ""
+    local bar = Odyssey:OdysseyNew("TextButton", {Text = "", AutoButtonColor = false, BackgroundColor3 = C.dark, Size = UDim2.new(1, 0, 0, 6),
+        LayoutOrder = 3, Parent = holder})
+    Odyssey:OdysseyCorner(bar, 3)
+    local fill = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.accent, Size = UDim2.new(0, 0, 1, 0), Parent = bar})
+    Odyssey:OdysseyCorner(fill, 3)
+    local knob = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.white, Size = UDim2.new(0, 12, 0, 12), AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0, 0, 0.5, 0), Parent = bar})
+    Odyssey:OdysseyCorner(knob, 6)
+    local el = {Value = lo, CurrentValue = lo}
+    local function fmt(v)
+        local s = (inc < 1) and string.format("%." .. math.clamp(#tostring(inc) - 2, 1, 3) .. "f", v) or tostring(math.floor(v + 0.5))
+        return s .. (o.Suffix and (" " .. tostring(o.Suffix)) or "")
+    end
+    local function snap(v)
+        v = math.clamp(tonumber(v) or lo, lo, hi)
+        v = lo + math.floor((v - lo) / inc + 0.5) * inc
+        return math.clamp(v, lo, hi)
+    end
+    local function draw()
+        local a = hi > lo and (el.Value - lo) / (hi - lo) or 0
+        fill.Size = UDim2.new(a, 0, 1, 0)
+        knob.Position = UDim2.new(a, 0, 0.5, 0)
+        val.Text = fmt(el.Value)
+    end
+    function el:Set(v, quiet)
+        if type(v) == "table" then v = v.CurrentValue end
+        v = snap(v)
+        local changed = v ~= el.Value
+        el.Value, el.CurrentValue = v, v
+        draw()
+        Odyssey:OdysseySetFlag(win, o.Flag, v)
+        if not quiet and (changed or quiet == false) then Odyssey:OdysseySafe(o.Callback, v) end
+    end
+    function el:GetValue() return el.Value end
+    local dragging = false
+    local function at(x)
+        local a = math.clamp((x - bar.AbsolutePosition.X) / math.max(1, bar.AbsoluteSize.X), 0, 1)
+        el:Set(lo + a * (hi - lo))
+    end
+    bar.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            at(i.Position.X)
+        end
+    end)
+    table.insert(win._conns, UIS.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = false end
+    end))
+    table.insert(win._conns, UIS.InputChanged:Connect(function(i)
+        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then at(i.Position.X) end
+    end))
+    Odyssey:OdysseyBase(el, row, desc)
+    Odyssey:OdysseyIndex(sec, row, o.Name, o.Description)
+    local saved = Odyssey:OdysseySaved(win, o.Flag)
+    if saved ~= nil then
+        el.Value = snap(saved) - 1e9
+        el:Set(saved)
+    else
+        el.Value = snap(o.CurrentValue or lo)
+        el.CurrentValue = el.Value
+        if o.Flag then Odyssey.Flags[o.Flag] = el.Value end
+        draw()
+    end
+    return el
+end
+
+-- Dropdown
+function Odyssey:OdysseyDropdown(page, o)
+    local win = page.win
+    local sec = Odyssey:OdysseyTarget(page, o)
+    local row = Odyssey:OdysseyRow(sec, 0, true)
+    local multi = o.MultipleOptions == true
+    local holder = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Parent = row})
+    Odyssey:OdysseyList(holder, 4)
+    Odyssey:OdysseyPad(holder, 6, 8, 7, 8)
+    Odyssey:OdysseyText({Text = tostring(o.Name or ""), Size = 12, Order = 1, Parent = holder})
+    local desc = Odyssey:OdysseyText({Text = tostring(o.Description or ""), Size = 10, Color = C.muted, Wrap = true, Order = 2,
+        Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Parent = holder})
+    desc.Visible = (o.Description or "") ~= ""
+    local box = Odyssey:OdysseyNew("TextButton", {Text = "", AutoButtonColor = false, BackgroundColor3 = C.dark, Size = UDim2.new(1, 0, 0, 24),
+        LayoutOrder = 3, Parent = holder})
+    Odyssey:OdysseyCorner(box, 4)
+    Odyssey:OdysseyStroke(box)
+    local shown = Odyssey:OdysseyText({Text = "", Size = 11, Sz = UDim2.new(1, -28, 1, 0), Pos = UDim2.new(0, 8, 0, 0), Parent = box})
+    local arrow = Odyssey:OdysseyText({Text = "▾", Size = 12, Color = C.muted, Sz = UDim2.new(0, 16, 1, 0), Anchor = Vector2.new(1, 0),
+        Pos = UDim2.new(1, -6, 0, 0), AlignX = Enum.TextXAlignment.Center, Parent = box})
+    local drop = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.dark, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+        Visible = false, LayoutOrder = 4, Parent = holder})
+    Odyssey:OdysseyCorner(drop, 4)
+    Odyssey:OdysseyStroke(drop)
+    Odyssey:OdysseyList(drop, 3)
+    Odyssey:OdysseyPad(drop, 5, 5, 5, 5)
+    local search = Odyssey:OdysseyNew("TextBox", {BackgroundColor3 = C.item, PlaceholderText = "Search", PlaceholderColor3 = C.dim, Text = "",
+        ClearTextOnFocus = false, FontFace = FONT, TextSize = 11, TextColor3 = C.text, TextXAlignment = Enum.TextXAlignment.Left,
+        Size = UDim2.new(1, 0, 0, 22), LayoutOrder = 1, Parent = drop})
+    Odyssey:OdysseyCorner(search, 4)
+    Odyssey:OdysseyPad(search, 0, 6, 0, 6)
+    local listBox = Odyssey:OdysseyNew("ScrollingFrame", {BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3,
+        ScrollBarImageColor3 = C.border, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        Size = UDim2.new(1, 0, 0, 0), LayoutOrder = 2, Parent = drop})
+    Odyssey:OdysseyList(listBox, 2)
+    local el = {Options = {}, CurrentOption = multi and {} or nil, Value = nil}
+    local maxVis = tonumber(o.MaxVisible) or 6
+    local function selectedSet()
+        local s = {}
+        if multi then for _, v in ipairs(el.CurrentOption) do s[v] = true end
+        elseif el.CurrentOption ~= nil then s[el.CurrentOption] = true end
+        return s
+    end
+    local function drawShown()
+        if multi then
+            local n = #el.CurrentOption
+            shown.Text = n == 0 and "None" or (n <= 2 and table.concat(el.CurrentOption, ", ") or (el.CurrentOption[1] .. ", +" .. (n - 1) .. " more"))
+        else
+            shown.Text = el.CurrentOption ~= nil and tostring(el.CurrentOption) or "None"
+        end
+    end
+    local fire
+    local function build()
+        for _, c in ipairs(listBox:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+        local q = search.Text:lower()
+        local sel = selectedSet()
+        local n = 0
+        for i, opt in ipairs(el.Options) do
+            local s = tostring(opt)
+            if q == "" or s:lower():find(q, 1, true) then
+                n += 1
+                local b = Odyssey:OdysseyNew("TextButton", {Text = "", AutoButtonColor = false, BackgroundColor3 = sel[opt] and C.hover or C.item,
+                    Size = UDim2.new(1, -4, 0, 22), LayoutOrder = i, Parent = listBox})
+                Odyssey:OdysseyCorner(b, 4)
+                Odyssey:OdysseyText({Text = s, Size = 11, Color = sel[opt] and C.white or C.text, Sz = UDim2.new(1, -26, 1, 0), Pos = UDim2.new(0, 8, 0, 0), Parent = b})
+                if sel[opt] then
+                    Odyssey:OdysseyText({Text = "✓", Size = 12, Color = C.accent, Sz = UDim2.new(0, 16, 1, 0), Anchor = Vector2.new(1, 0),
+                        Pos = UDim2.new(1, -4, 0, 0), AlignX = Enum.TextXAlignment.Center, Parent = b})
+                end
+                b.MouseButton1Click:Connect(function()
+                    if multi then
+                        local list, found = {}, false
+                        for _, v in ipairs(el.CurrentOption) do
+                            if v == opt then found = true else table.insert(list, v) end
+                        end
+                        if not found then table.insert(list, opt) end
+                        el.CurrentOption = list
+                    else
+                        el.CurrentOption = opt
+                        drop.Visible = false
+                        arrow.Text = "▾"
+                    end
+                    fire()
+                    build()
+                end)
+            end
+        end
+        listBox.Size = UDim2.new(1, 0, 0, math.min(n, maxVis) * 24)
+        search.Visible = #el.Options > 8
+    end
+    fire = function(quiet)
+        el.Value = el.CurrentOption
+        drawShown()
+        Odyssey:OdysseySetFlag(win, o.Flag, multi and Odyssey:OdysseyCopy(el.CurrentOption) or el.CurrentOption)
+        if not quiet then Odyssey:OdysseySafe(o.Callback, multi and Odyssey:OdysseyCopy(el.CurrentOption) or el.CurrentOption) end
+    end
+    search:GetPropertyChangedSignal("Text"):Connect(build)
+    box.MouseButton1Click:Connect(function()
+        drop.Visible = not drop.Visible
+        arrow.Text = drop.Visible and "▴" or "▾"
+        if drop.Visible then build() end
+    end)
+    local function clean(v)
+        if multi then
+            if type(v) ~= "table" then v = v ~= nil and {v} or {} end
+            return Odyssey:OdysseyCopy(v)
+        end
+        if type(v) == "table" then v = v[1] end
+        return v
+    end
+    function el:Set(v, quiet)
+        if type(v) == "table" and v.CurrentOption ~= nil then v = v.CurrentOption end
+        el.CurrentOption = clean(v)
+        fire(quiet)
+        if drop.Visible then build() end
+    end
+    function el:Refresh(list, keep)
+        el.Options = Odyssey:OdysseyCopy(type(list) == "table" and list or {})
+        -- picks stay as they are (lists often fill in after the saved picks load)
+        drawShown()
+        if drop.Visible then build() end
+    end
+    function el:GetValue() return el.CurrentOption end
+    Odyssey:OdysseyBase(el, row, desc)
+    Odyssey:OdysseyIndex(sec, row, o.Name, o.Description)
+    el.Options = Odyssey:OdysseyCopy(o.Options)
+    local saved = Odyssey:OdysseySaved(win, o.Flag)
+    if saved ~= nil then
+        el:Set(saved)
+    else
+        el.CurrentOption = clean(o.CurrentOption)
+        if not multi and el.CurrentOption == "" then el.CurrentOption = nil end
+        fire(true)
+    end
+    return el
+end
+
+-- Input
+function Odyssey:OdysseyInput(page, o)
+    local win = page.win
+    local sec = Odyssey:OdysseyTarget(page, o)
+    local row = Odyssey:OdysseyRow(sec, 0, true)
+    local holder = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Parent = row})
+    Odyssey:OdysseyList(holder, 4)
+    Odyssey:OdysseyPad(holder, 6, 8, 7, 8)
+    Odyssey:OdysseyText({Text = tostring(o.Name or ""), Size = 12, Order = 1, Parent = holder})
+    local desc = Odyssey:OdysseyText({Text = tostring(o.Description or ""), Size = 10, Color = C.muted, Wrap = true, Order = 2,
+        Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Parent = holder})
+    desc.Visible = (o.Description or "") ~= ""
+    local tb = Odyssey:OdysseyNew("TextBox", {BackgroundColor3 = C.dark, PlaceholderText = tostring(o.PlaceholderText or ""), PlaceholderColor3 = C.dim,
+        Text = "", ClearTextOnFocus = false, FontFace = FONT, TextSize = 11, TextColor3 = C.text, TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, Size = UDim2.new(1, 0, 0, 24), LayoutOrder = 3, Parent = holder})
+    Odyssey:OdysseyCorner(tb, 4)
+    Odyssey:OdysseyStroke(tb)
+    Odyssey:OdysseyPad(tb, 0, 8, 0, 8)
+    local el = {Value = "", CurrentValue = ""}
+    function el:Set(v, quiet)
+        if type(v) == "table" then v = v.CurrentValue or v.Text end
+        v = tostring(v or "")
+        tb.Text = v
+        el.Value, el.CurrentValue = v, v
+        Odyssey:OdysseySetFlag(win, o.Flag, v)
+        if not quiet then Odyssey:OdysseySafe(o.Callback, v) end
+    end
+    function el:GetValue() return tb.Text end
+    tb.FocusLost:Connect(function(enter)
+        if o.Enter and not enter then return end
+        local v = tb.Text
+        if o.Numeric then v = tostring(tonumber(v) or "") end
+        el:Set(v)
+        if o.RemoveTextAfterFocusLost then tb.Text = "" end
+    end)
+    Odyssey:OdysseyBase(el, row, desc)
+    Odyssey:OdysseyIndex(sec, row, o.Name, o.Description)
+    -- a saved value is shown in the box; the script reads it from Flags (it isn't sent to the callback on load)
+    local saved = Odyssey:OdysseySaved(win, o.Flag)
+    local start = saved ~= nil and tostring(saved) or tostring(o.CurrentValue or "")
+    tb.Text = start
+    el.Value, el.CurrentValue = start, start
+    if o.Flag then Odyssey.Flags[o.Flag] = start end
+    return el
+end
+
+-- Keybind
+function Odyssey:OdysseyBind(page, o)
+    local win = page.win
+    local sec = Odyssey:OdysseyTarget(page, o)
+    local row = Odyssey:OdysseyRow(sec, 28, true)
+    local _, desc = Odyssey:OdysseyNameBlock(row, o.Name, o.Description, 90)
+    local keyBox = Odyssey:OdysseyNew("TextButton", {AutoButtonColor = false, BackgroundColor3 = C.dark, FontFace = FONT_MED, TextSize = 11,
+        TextColor3 = C.accent, Text = "", AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.new(0, 40, 0, 20), AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -8, 0.5, 0), Parent = row})
+    Odyssey:OdysseyCorner(keyBox, 4)
+    Odyssey:OdysseyStroke(keyBox)
+    Odyssey:OdysseyPad(keyBox, 0, 8, 0, 8)
+    local el = {}
+    local listening = false
+    function el:Set(v)
+        if type(v) == "table" then v = v.CurrentKeybind end
+        el.Key = Odyssey:OdysseyKeyFrom(v)
+        el.CurrentKeybind = el.Key and el.Key.Name or "None"
+        keyBox.Text = el.CurrentKeybind
+        Odyssey:OdysseySetFlag(win, o.Flag, el.CurrentKeybind)
+    end
+    function el:GetValue() return el.CurrentKeybind end
+    keyBox.MouseButton1Click:Connect(function()
+        listening = true
+        keyBox.Text = "..."
+    end)
+    table.insert(win._conns, UIS.InputBegan:Connect(function(i, gp)
+        if i.UserInputType ~= Enum.UserInputType.Keyboard then return end
+        if listening then
+            listening = false
+            if i.KeyCode == Enum.KeyCode.Escape or i.KeyCode == Enum.KeyCode.Backspace then el:Set("None") else el:Set(i.KeyCode) end
+            return
+        end
+        if gp or UIS:GetFocusedTextBox() then return end
+        if el.Key and i.KeyCode == el.Key then Odyssey:OdysseySafe(o.Callback, el.Key) end
+    end))
+    Odyssey:OdysseyBase(el, row, desc)
+    Odyssey:OdysseyIndex(sec, row, o.Name, o.Description)
+    local saved = Odyssey:OdysseySaved(win, o.Flag)
+    el:Set(saved ~= nil and saved or o.CurrentKeybind or "None")
+    return el
+end
+
+-- Stat (big number box)
+function Odyssey:OdysseyStat(page, o)
+    local sec = Odyssey:OdysseyTarget(page, o)
+    local row = Odyssey:OdysseyRow(sec, tonumber(o.Height) or 46, true)
+    row.AutomaticSize = Enum.AutomaticSize.None
+    Odyssey:OdysseyText({Text = tostring(o.Name or ""), Size = 10, Color = C.muted, Pos = UDim2.new(0, 9, 0, 6), Sz = UDim2.new(1, -18, 0, 13), Parent = row})
+    local v = Odyssey:OdysseyText({Text = tostring(o.Value or "-"), Size = tonumber(o.TextSize) or 16, Color = C.white, Font = FONT_BOLD,
+        Pos = UDim2.new(0, 9, 0, 20), Sz = UDim2.new(1, -18, 1, -24), Parent = row})
+    local el = {}
+    function el:Set(x)
+        if type(x) == "table" then x = x.Value end
+        v.Text = tostring(x == nil and "-" or x)
+    end
+    Odyssey:OdysseyBase(el, row, nil)
+    Odyssey:OdysseyIndex(sec, row, o.Name, "")
+    return el
+end
+
+-- Progress bar
+function Odyssey:OdysseyProgress(page, o)
+    local sec = Odyssey:OdysseyTarget(page, o)
+    local row = Odyssey:OdysseyRow(sec, 36, true)
+    row.AutomaticSize = Enum.AutomaticSize.None
+    Odyssey:OdysseyText({Text = tostring(o.Name or ""), Size = 11, Pos = UDim2.new(0, 9, 0, 5), Sz = UDim2.new(0.6, -9, 0, 14), Parent = row})
+    local txt = Odyssey:OdysseyText({Text = tostring(o.Text or ""), Size = 11, Color = C.accent, AlignX = Enum.TextXAlignment.Right,
+        Anchor = Vector2.new(1, 0), Pos = UDim2.new(1, -9, 0, 5), Sz = UDim2.new(0.4, 0, 0, 14), Parent = row})
+    local bar = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.dark, Size = UDim2.new(1, -18, 0, 5), Position = UDim2.new(0, 9, 1, -11), Parent = row})
+    Odyssey:OdysseyCorner(bar, 3)
+    local fill = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.accent, Size = UDim2.new(0, 0, 1, 0), Parent = bar})
+    Odyssey:OdysseyCorner(fill, 3)
+    local el = {}
+    function el:Set(x)
+        local p = x
+        if type(x) == "table" then
+            if x.Text ~= nil then txt.Text = tostring(x.Text) end
+            p = x.Percent
+        end
+        p = tonumber(p)
+        if p then
+            if p > 1 then p = p / 100 end
+            Odyssey:OdysseyTween(fill, 0.2, {Size = UDim2.new(math.clamp(p, 0, 1), 0, 1, 0)})
+        end
+    end
+    el:Set({Percent = o.Percent or 0})
+    Odyssey:OdysseyBase(el, row, nil)
+    Odyssey:OdysseyIndex(sec, row, o.Name, "")
+    return el
+end
+
+-- ========== Functions · Tabs ==========
+
+-- Methods every tab (and section) gets
+function Odyssey:OdysseyTabApi(page)
+    local tab = {Page = page}
+    function tab:CreateSection(o)
+        local name, side = o, nil
+        if type(o) == "table" then name, side = o.Name, o.Side end
+        local col = (side == "Right" and 2) or (side == "Left" and 1) or page.col
+        local sec = Odyssey:OdysseySection(page, name, col)
+        local api = {}
+        for _, m in ipairs({"CreateToggle", "CreateDropdown", "CreateSlider", "CreateButton", "CreateLabel", "CreateParagraph",
+            "CreateInput", "CreateBind", "CreateKeybind", "CreateStat", "CreateProgress"}) do
+            api[m] = function(_, opts)
+                local keep = page.section
+                page.section = sec
+                local el = tab[m](tab, opts)
+                page.section = keep
+                return el
+            end
+        end
+        function api:Set(n)
+            local head = sec.card.Body.Head
+            local l = head:FindFirstChildOfClass("TextLabel")
+            if l then l.Text = tostring(n or ""):upper() end
+            head.Visible = (n or "") ~= ""
+        end
+        return api
+    end
+    function tab:Side(s)
+        page.col = (s == "Right") and 2 or 1
+        page.section = page.lastByCol[page.col]
+    end
+    function tab:CreateToggle(o) return Odyssey:OdysseyToggle(page, o or {}) end
+    function tab:CreateDropdown(o) return Odyssey:OdysseyDropdown(page, o or {}) end
+    function tab:CreateSlider(o) return Odyssey:OdysseySlider(page, o or {}) end
+    function tab:CreateButton(o) return Odyssey:OdysseyButton(page, o or {}) end
+    function tab:CreateLabel(o) return Odyssey:OdysseyLabel(page, o or {}) end
+    function tab:CreateParagraph(o) return Odyssey:OdysseyParagraph(page, o or {}) end
+    function tab:CreateInput(o) return Odyssey:OdysseyInput(page, o or {}) end
+    function tab:CreateBind(o) return Odyssey:OdysseyBind(page, o or {}) end
+    tab.CreateKeybind = tab.CreateBind
+    function tab:CreateStat(o) return Odyssey:OdysseyStat(page, o or {}) end
+    function tab:CreateProgress(o) return Odyssey:OdysseyProgress(page, o or {}) end
+    return tab
+end
+
+-- New tab page
+function Odyssey:OdysseyPage(win, o, kind)
+    local frame = Odyssey:OdysseyNew("ScrollingFrame", {
+        Name = "Page_" .. tostring(o.Name),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = C.border,
+        CanvasSize = UDim2.new(),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        Size = UDim2.new(1, 0, 1, 0),
+        Visible = false,
+        Parent = win._content,
+    })
+    Odyssey:OdysseyPad(frame, 7, 8, 7, 7)
+    local page = {win = win, frame = frame, kind = kind or "tab", name = o.Name, group = o.Group, order = tonumber(o.Order) or 99,
+        idx = #win._pages + 1, col = 1, lastByCol = {}}
+    if page.kind == "tab" then
+        local colsFrame = Odyssey:OdysseyNew("Frame", {Name = "Columns", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y, Visible = false, Parent = frame})
+        local cols = {}
+        for i = 1, 2 do
+            cols[i] = Odyssey:OdysseyNew("Frame", {Name = "Col" .. i, BackgroundTransparency = 1, Size = UDim2.new(0.5, -3, 0, 0),
+                Position = UDim2.new((i - 1) * 0.5, (i - 1) * 3, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Parent = colsFrame})
+            local l = Odyssey:OdysseyList(cols[i], 6)
+            l:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() Odyssey:OdysseyFill(win, page) end)
+        end
+        page.root = {cards = {}, cols = cols, colsFrame = colsFrame}
+        table.insert(win._roots, page.root)
+        frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() Odyssey:OdysseyFill(win, page) end)
+    end
+    table.insert(win._pages, page)
+    return page
+end
+
+-- ========== Functions · Home ==========
+
+-- Small card on the Home page
+function Odyssey:OdysseyCard(parent, title, order)
+    local card = Odyssey:OdysseyNew("Frame", {Name = "Card_" .. tostring(title), BackgroundColor3 = C.panel, Size = UDim2.new(1, 0, 1, 0),
+        LayoutOrder = order or 0, ClipsDescendants = true, Parent = parent})
+    Odyssey:OdysseyCorner(card, 6)
+    Odyssey:OdysseyStroke(card)
+    local body = Odyssey:OdysseyNew("Frame", {Name = "Body", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = card})
+    Odyssey:OdysseyPad(body, 8, 9, 8, 9)
+    Odyssey:OdysseyList(body, 5)
+    if title then
+        local head = Odyssey:OdysseyNew("Frame", {Name = "Head", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 14), Parent = body})
+        Odyssey:OdysseyText({Text = tostring(title):upper(), Font = FONT_BOLD, Size = 10, Color = C.muted, Sz = UDim2.new(1, -60, 1, 0), Parent = head})
+        return card, body, head
+    end
+    return card, body
+end
+
+-- Name / value line
+function Odyssey:OdysseyKV(parent, name, value, boxed, order)
+    local r = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.dark, BackgroundTransparency = boxed and 0.55 or 1,
+        Size = UDim2.new(1, 0, 0, boxed and 22 or 14), LayoutOrder = order or 1, Parent = parent})
+    if boxed then
+        Odyssey:OdysseyCorner(r, 4)
+        Odyssey:OdysseyStroke(r)
+        Odyssey:OdysseyPad(r, 0, 8, 0, 8)
+    end
+    Odyssey:OdysseyText({Text = tostring(name), Size = 10, Color = C.muted, Sz = UDim2.new(0.5, 0, 1, 0), Parent = r})
+    local v = Odyssey:OdysseyText({Text = tostring(value), Size = 10, Color = C.white, AlignX = Enum.TextXAlignment.Right,
+        Sz = UDim2.new(0.5, 0, 1, 0), Pos = UDim2.new(0.5, 0, 0, 0), Parent = r})
+    return v
+end
+
+-- Pill button
+function Odyssey:OdysseyPill(parent, text, primary, order)
+    local b = Odyssey:OdysseyNew("TextButton", {AutoButtonColor = false, BackgroundColor3 = primary and C.accent or C.dark,
+        BackgroundTransparency = primary and 0 or 0.55, FontFace = primary and FONT_BOLD or FONT, TextSize = 10,
+        TextColor3 = primary and C.dark or C.white, Text = text, AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.new(0, 0, 0, 24),
+        LayoutOrder = order or 9, Parent = parent})
+    Odyssey:OdysseyCorner(b, 5)
+    if not primary then Odyssey:OdysseyStroke(b) end
+    Odyssey:OdysseyPad(b, 0, 12, 0, 12)
+    return b
+end
+
+-- Build the Home page
+function Odyssey:OdysseyBuildHome(win)
+    local page = Odyssey:OdysseyPage(win, {Name = "Home"}, "home")
+    page.frame.AutomaticCanvasSize = Enum.AutomaticSize.None
+    page.frame.ScrollingEnabled = false
+    win._home = page
+    -- Overview
+    local ov = Odyssey:OdysseyNew("Frame", {Name = "Overview", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = page.frame})
+    local stats = Odyssey:OdysseyNew("Frame", {Name = "Stats", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 98), Parent = ov})
+    Odyssey:OdysseyNew("UIGridLayout", {CellPadding = UDim2.new(0, 6, 0, 6), CellSize = UDim2.new(1 / 3, -4, 0, 46),
+        SortOrder = Enum.SortOrder.LayoutOrder, Parent = stats})
+    win._statsFrame = stats
+    local mid = Odyssey:OdysseyNew("Frame", {Name = "Middle", BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 104),
+        Size = UDim2.new(1, 0, 0, 112), Parent = ov})
+    local bottom = Odyssey:OdysseyNew("Frame", {Name = "Bottom", BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 222),
+        Size = UDim2.new(1, 0, 1, -222), Parent = ov})
+    for _, f in ipairs({mid, bottom}) do
+        Odyssey:OdysseyNew("UIGridLayout", {CellPadding = UDim2.new(0, 6, 0, 0), CellSize = UDim2.new(0.5, -3, 1, 0),
+            SortOrder = Enum.SortOrder.LayoutOrder, Parent = f})
+    end
+    -- Character
+    local _, cb, ch = Odyssey:OdysseyCard(mid, "Character", 1)
+    local age = 0
+    pcall(function() age = LP.AccountAge end)
+    local real = Odyssey:OdysseyNew("TextLabel", {BackgroundColor3 = age >= 30 and C.good or C.warn, BackgroundTransparency = 0.82,
+        FontFace = FONT_BOLD, TextSize = 9, TextColor3 = age >= 30 and C.good or C.warn, Text = age >= 30 and "Real" or "New",
+        AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.new(0, 0, 0, 14), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0), Parent = ch})
+    Odyssey:OdysseyCorner(real, 7)
+    Odyssey:OdysseyPad(real, 0, 6, 0, 6)
+    Odyssey:OdysseyKV(cb, "Display name", LP.DisplayName, false, 2)
+    Odyssey:OdysseyKV(cb, "Username", "@" .. LP.Name, false, 3)
+    Odyssey:OdysseyKV(cb, "Account age", tostring(age) .. " days", false, 4)
+    Odyssey:OdysseyKV(cb, "User ID", tostring(LP.UserId), false, 5)
+    -- Session (filled by SetHomeCard)
+    local sc, sb, sh = Odyssey:OdysseyCard(mid, "Session", 2)
+    win._sessionCard, win._sessionBody, win._sessionHead = sc, sb, sh
+    -- Shop + Discord
+    local _, shopB = Odyssey:OdysseyCard(bottom, "Odyssey Shop", 1)
+    Odyssey:OdysseyText({Text = SHOP_TEXT, Size = 10, Wrap = true, Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Order = 2, Parent = shopB})
+    Odyssey:OdysseyText({Text = "Items · Pets · Currency", Size = 9, Color = C.muted, Order = 3, Parent = shopB})
+    local shopBtn = Odyssey:OdysseyPill(shopB, "Shop · Soon", false, 9)
+    shopBtn.MouseButton1Click:Connect(function()
+        win:Notify({Title = "Odyssey Shop", Content = "Coming soon. Orders go through the Odyssey Hub Discord."})
+    end)
+    local _, discB = Odyssey:OdysseyCard(bottom, "Odyssey Hub Discord", 2)
+    Odyssey:OdysseyText({Text = DISCORD_TEXT, Size = 10, Wrap = true, Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Order = 2, Parent = discB})
+    Odyssey:OdysseyText({Text = "Odyssey Paid · Out now", Size = 9, Color = C.muted, Order = 3, Parent = discB})
+    win._discordBtn = Odyssey:OdysseyPill(discB, "Join Odyssey Hub", true, 9)
+    win._discordBtn.MouseButton1Click:Connect(function()
+        if win._discordCb then Odyssey:OdysseySafe(win._discordCb) end
+    end)
+    -- Updates
+    local up = Odyssey:OdysseyNew("ScrollingFrame", {Name = "Updates", BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3,
+        ScrollBarImageColor3 = C.border, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, Size = UDim2.new(1, 0, 1, 0),
+        Visible = false, Parent = page.frame})
+    Odyssey:OdysseyList(up, 6)
+    win._updates = up
+    -- Community
+    local com = Odyssey:OdysseyNew("Frame", {Name = "Community", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Visible = false, Parent = page.frame})
+    Odyssey:OdysseyList(com, 6)
+    local c1 = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 120), LayoutOrder = 1, Parent = com})
+    local _, b1 = Odyssey:OdysseyCard(c1, "Odyssey Hub Discord", 1)
+    Odyssey:OdysseyText({Text = DISCORD_TEXT .. " Report bugs, ask for help and hear about new games first.", Size = 11, Wrap = true,
+        Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Order = 2, Parent = b1})
+    local d2 = Odyssey:OdysseyPill(b1, "Join Odyssey Hub", true, 9)
+    d2.MouseButton1Click:Connect(function() if win._discordCb then Odyssey:OdysseySafe(win._discordCb) end end)
+    local c2 = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 110), LayoutOrder = 2, Parent = com})
+    local _, b2 = Odyssey:OdysseyCard(c2, "Odyssey Shop", 1)
+    Odyssey:OdysseyText({Text = SHOP_TEXT, Size = 11, Wrap = true, Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Order = 2, Parent = b2})
+    local s2 = Odyssey:OdysseyPill(b2, "Shop · Soon", false, 9)
+    s2.MouseButton1Click:Connect(function() win:Notify({Title = "Odyssey Shop", Content = "Coming soon. Orders go through the Odyssey Hub Discord."}) end)
+    win._homeSubs = {Overview = ov, Updates = up, Community = com}
+    win._homeSub = "Overview"
+    page.button = Odyssey:OdysseyTabButton(win, "Home", "🏠", 1)
+    page.button.MouseButton1Click:Connect(function() Odyssey:OdysseyOpenPage(win, page) end)
+    return page
+end
+
+-- Switch Home sub page
+function Odyssey:OdysseyHomeSub(win, name)
+    win._homeSub = name
+    for n, f in pairs(win._homeSubs) do f.Visible = (n == name) end
+    Odyssey:OdysseyBuildHeader(win)
+end
+
+-- ========== Functions · Search ==========
+
+-- Search results
+function Odyssey:OdysseySearch(win, q)
+    local page = win._searchPage
+    for _, c in ipairs(page.frame:GetChildren()) do if c:IsA("TextButton") or c.Name == "Empty" then c:Destroy() end end
+    q = tostring(q or ""):lower()
+    if q == "" then
+        if win._beforeSearch then Odyssey:OdysseyOpenPage(win, win._beforeSearch) end
+        win._beforeSearch = nil
+        return
+    end
+    if win._current ~= page then win._beforeSearch = win._current end
+    Odyssey:OdysseyOpenPage(win, page)
+    local n = 0
+    for _, it in ipairs(win._searchItems) do
+        if it.row and it.row.Parent and (it.name:lower():find(q, 1, true) or it.desc:lower():find(q, 1, true)) then
+            n += 1
+            if n > 60 then break end
+            local tabName = it.page and tostring(it.page.Name):gsub("^Page_", "") or "?"
+            local secName = it.sec and tostring(it.sec.Name):gsub("^Section_", "") or ""
+            local b = Odyssey:OdysseyNew("TextButton", {AutoButtonColor = false, Text = "", BackgroundColor3 = C.panel, Size = UDim2.new(1, 0, 0, 34),
+                LayoutOrder = n, Parent = page.frame})
+            Odyssey:OdysseyCorner(b, 5)
+            Odyssey:OdysseyStroke(b)
+            Odyssey:OdysseyText({Text = it.name, Size = 12, Pos = UDim2.new(0, 9, 0, 3), Sz = UDim2.new(1, -18, 0, 15), Parent = b})
+            Odyssey:OdysseyText({Text = tabName .. (secName ~= "" and (" › " .. secName) or ""), Size = 10, Color = C.muted,
+                Pos = UDim2.new(0, 9, 0, 18), Sz = UDim2.new(1, -18, 0, 13), Parent = b})
+            b.MouseButton1Click:Connect(function()
+                for _, p in ipairs(win._pages) do
+                    if p.frame == it.page then
+                        win._searchBox.Text = ""
+                        win._beforeSearch = nil
+                        Odyssey:OdysseyOpenPage(win, p)
+                        Odyssey:OdysseyScrollTo(win, p, it.sec, it.row)
+                        break
+                    end
+                end
+            end)
+        end
+    end
+    if n == 0 then
+        Odyssey:OdysseyText({Name = "Empty", Text = "Nothing matches \"" .. q .. "\"", Size = 11, Color = C.muted, Parent = page.frame})
+    end
+end
+
+-- ========== Functions · Popups ==========
+
+-- Notification
+function Odyssey:OdysseyNotify(win, o)
+    if type(o) ~= "table" then o = {Content = tostring(o)} end
+    local holder = win._notes
+    local color = NOTIFY_COLORS[o.Type] or C.accent
+    local n = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.side, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1, LayoutOrder = math.floor(os.clock() * 1000) % 2000000000, Parent = holder})
+    Odyssey:OdysseyCorner(n, 6)
+    local st = Odyssey:OdysseyStroke(n)
+    st.Transparency = 1
+    local stripe = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = color, Size = UDim2.new(0, 3, 1, -12), Position = UDim2.new(0, 6, 0, 6),
+        BackgroundTransparency = 1, Parent = n})
+    Odyssey:OdysseyCorner(stripe, 2)
+    local body = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Parent = n})
+    Odyssey:OdysseyPad(body, 8, 10, 8, 16)
+    Odyssey:OdysseyList(body, 2)
+    local t = Odyssey:OdysseyText({Text = tostring(o.Title or win.name), Font = FONT_BOLD, Size = 12, Color = C.white, Order = 1, Parent = body})
+    local c = Odyssey:OdysseyText({Text = tostring(o.Content or ""), Size = 11, Color = C.muted, Wrap = true, Order = 2,
+        Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Parent = body})
+    t.TextTransparency, c.TextTransparency = 1, 1
+    Odyssey:OdysseyTween(n, 0.2, {BackgroundTransparency = 0.05})
+    Odyssey:OdysseyTween(st, 0.2, {Transparency = 0})
+    Odyssey:OdysseyTween(stripe, 0.2, {BackgroundTransparency = 0})
+    Odyssey:OdysseyTween(t, 0.2, {TextTransparency = 0})
+    Odyssey:OdysseyTween(c, 0.2, {TextTransparency = 0})
+    task.delay(tonumber(o.Duration) or 4, function()
+        pcall(function()
+            for _, x in ipairs({{n, "BackgroundTransparency"}, {stripe, "BackgroundTransparency"}, {t, "TextTransparency"}, {c, "TextTransparency"}, {st, "Transparency"}}) do
+                Odyssey:OdysseyTween(x[1], 0.25, {[x[2]] = 1})
+            end
+            task.wait(0.3)
+            n:Destroy()
+        end)
+    end)
+    -- at most 5 on screen
+    local kids = {}
+    for _, k in ipairs(holder:GetChildren()) do if k:IsA("Frame") then table.insert(kids, k) end end
+    table.sort(kids, function(a, b) return a.LayoutOrder > b.LayoutOrder end)
+    for i = 6, #kids do kids[i]:Destroy() end
+end
+
+-- Yes / no box
+function Odyssey:OdysseyConfirm(win, o)
+    local dim = Odyssey:OdysseyNew("TextButton", {Text = "", AutoButtonColor = false, BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.45,
+        Size = UDim2.new(1, 0, 1, 0), ZIndex = 50, Parent = win.Root})
+    Odyssey:OdysseyCorner(dim, 6)
+    local box = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.panel, Size = UDim2.new(0, 300, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), ZIndex = 51, Parent = dim})
+    Odyssey:OdysseyCorner(box, 8)
+    Odyssey:OdysseyStroke(box)
+    Odyssey:OdysseyPad(box, 12, 12, 12, 12)
+    Odyssey:OdysseyList(box, 8)
+    Odyssey:OdysseyText({Text = tostring(o.Title or "Are you sure?"), Font = FONT_BOLD, Size = 13, Color = C.white, Order = 1, Z = 52, Parent = box})
+    Odyssey:OdysseyText({Text = tostring(o.Content or ""), Size = 11, Color = C.muted, Wrap = true, Order = 2, Z = 52,
+        Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Parent = box})
+    local row = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 26), LayoutOrder = 3, ZIndex = 52, Parent = box})
+    local l = Odyssey:OdysseyList(row, 6, Enum.FillDirection.Horizontal)
+    l.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    local no = Odyssey:OdysseyPill(row, tostring(o.CancelText or "Cancel"), false, 1)
+    local yes = Odyssey:OdysseyPill(row, tostring(o.ConfirmText or "Confirm"), true, 2)
+    no.ZIndex, yes.ZIndex = 53, 53
+    local function close() dim:Destroy() end
+    no.MouseButton1Click:Connect(function() close() Odyssey:OdysseySafe(o.OnCancel) end)
+    yes.MouseButton1Click:Connect(function() close() Odyssey:OdysseySafe(o.OnConfirm) end)
+end
+
+-- Floating progress bar (top of the screen)
+function Odyssey:OdysseyProgressWidget(win, o)
+    local lo, hi = (o.Range and o.Range[1]) or 0, (o.Range and o.Range[2]) or 100
+    local f = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.side, Size = UDim2.new(0, 320, 0, 40), AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0, 12), Parent = win.Gui})
+    Odyssey:OdysseyCorner(f, 6)
+    Odyssey:OdysseyStroke(f)
+    local t = Odyssey:OdysseyText({Text = tostring(o.Name or ""), Size = 11, Pos = UDim2.new(0, 10, 0, 6), Sz = UDim2.new(1, -60, 0, 14), Parent = f})
+    local pct = Odyssey:OdysseyText({Text = "0%", Size = 11, Color = C.accent, AlignX = Enum.TextXAlignment.Right, Anchor = Vector2.new(1, 0),
+        Pos = UDim2.new(1, -10, 0, 6), Sz = UDim2.new(0, 50, 0, 14), Parent = f})
+    local bar = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.dark, Size = UDim2.new(1, -20, 0, 5), Position = UDim2.new(0, 10, 1, -12), Parent = f})
+    Odyssey:OdysseyCorner(bar, 3)
+    local fill = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.accent, Size = UDim2.new(0, 0, 1, 0), Parent = bar})
+    Odyssey:OdysseyCorner(fill, 3)
+    local w = {}
+    function w:Set(x)
+        local v = x
+        if type(x) == "table" then
+            if x.Name then t.Text = tostring(x.Name) end
+            v = x.Value
+        end
+        v = tonumber(v)
+        if v then
+            local a = hi > lo and math.clamp((v - lo) / (hi - lo), 0, 1) or 0
+            fill.Size = UDim2.new(a, 0, 1, 0)
+            pct.Text = math.floor(a * 100 + 0.5) .. "%"
+        end
+    end
+    function w:Destroy() f:Destroy() end
+    w:Set({Value = o.CurrentValue or lo})
+    Odyssey:OdysseyDrag(f, f, nil)
+    return w
+end
+
+-- ========== Functions · Settings tab ==========
+
+-- Built-in Settings tab
+function Odyssey:OdysseySettingsTab(win)
+    local page = Odyssey:OdysseyPage(win, {Name = "Settings", Order = 1e9}, "tab")
+    page.kind = "tab"
+    page.settings = true
+    local tab = Odyssey:OdysseyTabApi(page)
+    page.api = tab
+    page.button = Odyssey:OdysseyTabButton(win, "Settings", "⚙️", 10000)
+    page.button.MouseButton1Click:Connect(function() Odyssey:OdysseyOpenPage(win, page) end)
+    tab:CreateSection("Interface")
+    tab:CreateSlider({
+        Name = "UI Size",
+        Range = {50, 150},
+        Increment = 5,
+        CurrentValue = win._autoScale or 100,
+        Suffix = "%",
+        Flag = "HoloScale",
+        Callback = function(v)
+            if win.FitScale then win.FitScale(v / 100) else win.Scale.Scale = v / 100 end
+        end,
+    })
+    tab:CreateBind({
+        Name = "Show / hide key",
+        CurrentKeybind = Odyssey:OdysseyKeyName(win.toggleKey),
+        Flag = "HoloToggleKey",
+        Callback = function() end,
+    })
+    tab:CreateButton({
+        Name = "Close Odyssey",
+        Description = "Stops the script and removes the menu",
+        Style = "Danger",
+        Callback = function()
+            Odyssey:OdysseyConfirm(win, {Title = "Close Odyssey?", Content = "Everything stops. Run the script again to get it back.",
+                ConfirmText = "Close", OnConfirm = function() win:Destroy() end})
+        end,
+    })
+    tab:Side("Right")
+    tab:CreateSection("Config")
+    tab:CreateParagraph({Title = "Saved settings", Content = "Every toggle, slider and dropdown saves by itself to " .. Odyssey:OdysseyConfigPath(win)})
+    tab:CreateButton({
+        Name = "Reset settings",
+        Description = "Clears the saved file. Run the script again after",
+        Callback = function()
+            Odyssey:OdysseyConfirm(win, {Title = "Reset settings?", Content = "Your saved toggles and picks are cleared.", ConfirmText = "Reset",
+                OnConfirm = function()
+                    pcall(function() if delfile then delfile(Odyssey:OdysseyConfigPath(win)) else writefile(Odyssey:OdysseyConfigPath(win), "{}") end end)
+                    win._saveGen = (win._saveGen or 0) + 1000
+                    win._noSave = true
+                    win:Notify({Type = "Success", Content = "Settings cleared · run the script again"})
+                end})
+        end,
+    })
+    tab:Side("Left")
+    win._settings = page
+    return page
+end
+
+-- ========== Window ==========
+
+function Odyssey:CreateWindow(o)
+    o = o or {}
+    local win = {
+        name = o.Name or "Odyssey",
+        folder = o.Folder or o.Name or "Odyssey",
+        oldConfig = o.OldConfig,
+        toggleKey = o.ToggleKey or Enum.KeyCode.RightControl,
+        open = true,
+        _conns = {},
+        _pages = {},
+        _roots = {},
+        _searchItems = {},
+        _searchSections = {},
+        _compact = false,
+        _community = nil,   -- the new Home already has the Shop and Discord panels
+    }
+    Odyssey:OdysseyLoadConfig(win)
+    if Odyssey.Flags.HoloToggleKey then win.toggleKey = Odyssey:OdysseyKeyFrom(Odyssey.Flags.HoloToggleKey) or win.toggleKey end
+
+    -- old copies of the menu go away
+    local parent = Odyssey:OdysseyGuiParent()
+    pcall(function()
+        for _, g in ipairs(parent:GetChildren()) do
+            if g.Name == "OdysseyUI_" .. win.name then g:Destroy() end
+        end
+    end)
+    local gui = Odyssey:OdysseyNew("ScreenGui", {Name = "OdysseyUI_" .. win.name, ResetOnSpawn = false, IgnoreGuiInset = true,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 999})
+    pcall(function() if syn and syn.protect_gui then syn.protect_gui(gui) end end)
+    gui.Parent = parent
+    win.Gui = gui
+
+    -- window
+    local root = Odyssey:OdysseyNew("Frame", {Name = "Window", BackgroundColor3 = C.main, Size = UDim2.new(0, W, 0, H),
+        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), ClipsDescendants = true, Parent = gui})
+    Odyssey:OdysseyCorner(root, 7)
+    Odyssey:OdysseyStroke(root)
+    win.Root = root
+    win.Scale = Odyssey:OdysseyNew("UIScale", {Scale = 1, Parent = root})
+
+    -- sidebar
+    local side = Odyssey:OdysseyNew("Frame", {Name = "Sidebar", BackgroundColor3 = C.side, Size = UDim2.new(0, SIDE_W, 1, 0), Parent = root})
+    Odyssey:OdysseyCorner(side, 7)
+    Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.side, BorderSizePixel = 0, Size = UDim2.new(0, 8, 1, 0), Position = UDim2.new(1, -8, 0, 0), Parent = side})
+    local brand = Odyssey:OdysseyNew("Frame", {Name = "Brand", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 146), Parent = side})
+    Odyssey:OdysseyText({Text = win.name, Font = FONT_BOLD, Size = 16, AlignX = Enum.TextXAlignment.Center, Pos = UDim2.new(0, 0, 0, 10),
+        Sz = UDim2.new(1, 0, 0, 20), Parent = brand})
+    Odyssey:OdysseyText({Text = tostring(o.Subtitle or ""), Size = 10, Color = C.muted, AlignX = Enum.TextXAlignment.Center,
+        Pos = UDim2.new(0, 0, 0, 30), Sz = UDim2.new(1, 0, 0, 14), Parent = brand})
+    local logo = Odyssey:OdysseyNew("ImageLabel", {Name = "Logo", BackgroundColor3 = C.item, Image = tostring(o.Logo or o.Icon or ""),
+        ScaleType = Enum.ScaleType.Crop, Size = UDim2.new(0, 92, 0, 92), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 50), Parent = brand})
+    Odyssey:OdysseyCorner(logo, 14)
+    Odyssey:OdysseyStroke(logo)
+    if (o.Logo or o.Icon or "") == "" then
+        Odyssey:OdysseyText({Text = win.name:sub(1, 1):upper(), Font = FONT_BOLD, Size = 40, Color = C.accent, AlignX = Enum.TextXAlignment.Center,
+            Sz = UDim2.new(1, 0, 1, 0), Parent = logo})
+    end
+    Odyssey:OdysseyDrag(brand, root, win)
+    -- search
+    local sb = Odyssey:OdysseyNew("Frame", {Name = "Search", BackgroundColor3 = C.item, Size = UDim2.new(1, -16, 0, 24), Position = UDim2.new(0, 8, 0, 150), Parent = side})
+    Odyssey:OdysseyCorner(sb, 4)
+    Odyssey:OdysseyStroke(sb)
+    Odyssey:OdysseyText({Text = "⌕", Size = 13, Color = C.muted, Sz = UDim2.new(0, 18, 1, 0), Pos = UDim2.new(0, 4, 0, 0), AlignX = Enum.TextXAlignment.Center, Parent = sb})
+    local box = Odyssey:OdysseyNew("TextBox", {BackgroundTransparency = 1, PlaceholderText = "Search", PlaceholderColor3 = C.dim, Text = "",
+        ClearTextOnFocus = false, FontFace = FONT, TextSize = 11, TextColor3 = C.text, TextXAlignment = Enum.TextXAlignment.Left,
+        Size = UDim2.new(1, -28, 1, 0), Position = UDim2.new(0, 24, 0, 0), Parent = sb})
+    win._searchBox = box
+    -- tabs
+    local tabs = Odyssey:OdysseyNew("ScrollingFrame", {Name = "Tabs", BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2,
+        ScrollBarImageColor3 = C.border, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        Size = UDim2.new(1, -12, 1, -186), Position = UDim2.new(0, 6, 0, 182), Parent = side})
+    Odyssey:OdysseyList(tabs, 2)
+    win._tabList = tabs
+
+    -- main
+    local main = Odyssey:OdysseyNew("Frame", {Name = "Main", BackgroundTransparency = 1, Size = UDim2.new(1, -SIDE_W, 1, 0),
+        Position = UDim2.new(0, SIDE_W, 0, 0), Parent = root})
+    local head = Odyssey:OdysseyNew("Frame", {Name = "Header", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 34), Parent = main})
+    Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.border, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1), Parent = head})
+    Odyssey:OdysseyDrag(head, root, win)
+    local headTabs = Odyssey:OdysseyNew("ScrollingFrame", {Name = "SectionTabs", BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0,
+        ScrollingDirection = Enum.ScrollingDirection.X, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.X,
+        Size = UDim2.new(1, -150, 1, -1), Position = UDim2.new(0, 8, 0, 0), Parent = head})
+    Odyssey:OdysseyList(headTabs, 2, Enum.FillDirection.Horizontal)
+    win._headTabs = headTabs
+    local right = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(0, 140, 1, 0), AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -8, 0, 0), Parent = head})
+    local rl = Odyssey:OdysseyList(right, 6, Enum.FillDirection.Horizontal)
+    rl.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    rl.VerticalAlignment = Enum.VerticalAlignment.Center
+    local badgeHolder = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.new(0, 0, 0, 18), LayoutOrder = 1, Parent = right})
+    win._badge = Odyssey:OdysseyBadge(win, badgeHolder, o.Tier or "Free")
+    local function headBtn(t, order)
+        local b = Odyssey:OdysseyNew("TextButton", {AutoButtonColor = false, BackgroundColor3 = C.panel, FontFace = FONT_MED, TextSize = 13,
+            TextColor3 = C.muted, Text = t, Size = UDim2.new(0, 22, 0, 22), LayoutOrder = order, Parent = right})
+        Odyssey:OdysseyCorner(b, 4)
+        return b
+    end
+    local minBtn = headBtn("–", 2)
+    local closeBtn = headBtn("×", 3)
+    -- pages
+    local content = Odyssey:OdysseyNew("Frame", {Name = "Content", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, -34 - 22),
+        Position = UDim2.new(0, 0, 0, 34), Parent = main})
+    win._content = content
+    -- footer
+    local foot = Odyssey:OdysseyNew("Frame", {Name = "Footer", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(0, 0, 1, -22), Parent = main})
+    Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.border, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 1), Parent = foot})
+    local keyText = Odyssey:OdysseyText({Text = "", Size = 10, Color = C.muted, Pos = UDim2.new(0, 10, 0, 0), Sz = UDim2.new(0.6, 0, 1, 0), Parent = foot})
+    Odyssey:OdysseyText({Text = "Theme: Ocean Steel", Size = 10, Color = C.muted, AlignX = Enum.TextXAlignment.Right, Anchor = Vector2.new(1, 0),
+        Pos = UDim2.new(1, -10, 0, 0), Sz = UDim2.new(0.4, 0, 1, 0), Parent = foot})
+    local function drawKey() keyText.Text = "Toggle UI: " .. Odyssey:OdysseyKeyName(win.toggleKey) .. " · Lib v" .. Odyssey.Version end
+    drawKey()
+
+    -- notifications
+    win._notes = Odyssey:OdysseyNew("Frame", {Name = "Notifications", BackgroundTransparency = 1, Size = UDim2.new(0, 270, 1, -24),
+        AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -12, 1, -12), Parent = gui})
+    local nl = Odyssey:OdysseyList(win._notes, 6)
+    nl.VerticalAlignment = Enum.VerticalAlignment.Bottom
+
+    -- open / close button
+    local orb = Odyssey:OdysseyNew("ImageButton", {Name = "Orb", AutoButtonColor = false, BackgroundColor3 = C.side, Image = tostring(o.Logo or o.Icon or ""),
+        ScaleType = Enum.ScaleType.Crop, Size = UDim2.new(0, 40, 0, 40), Position = UDim2.new(0, 12, 0, 60), Parent = gui})
+    Odyssey:OdysseyCorner(orb, 10)
+    Odyssey:OdysseyStroke(orb)
+    if (o.Logo or o.Icon or "") == "" then
+        Odyssey:OdysseyText({Text = win.name:sub(1, 1):upper(), Font = FONT_BOLD, Size = 20, Color = C.accent, AlignX = Enum.TextXAlignment.Center,
+            Sz = UDim2.new(1, 0, 1, 0), Parent = orb})
+    end
+    win.Orb = orb
+    local moved = false
+    do
+        local dragging, start, startPos
+        orb.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging, start, startPos, moved = true, i.Position, orb.Position, false
+                i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dragging = false end end)
+            end
+        end)
+        table.insert(win._conns, UIS.InputChanged:Connect(function(i)
+            if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+                local d = i.Position - start
+                if d.Magnitude > 4 then moved = true end
+                orb.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+            end
+        end))
+    end
+    orb.MouseButton1Click:Connect(function() if not moved then Odyssey:OdysseySetOpen(win, not win.open) end end)
+    minBtn.MouseButton1Click:Connect(function() Odyssey:OdysseySetOpen(win, false) end)
+    closeBtn.MouseButton1Click:Connect(function()
+        Odyssey:OdysseyConfirm(win, {Title = "Close Odyssey?", Content = "Everything stops. Run the script again to get it back.",
+            ConfirmText = "Close", OnConfirm = function() win:Destroy() end})
+    end)
+    table.insert(win._conns, UIS.InputBegan:Connect(function(i, gp)
+        if gp or UIS:GetFocusedTextBox() then return end
+        if i.KeyCode == win.toggleKey then Odyssey:OdysseySetOpen(win, not win.open) end
+    end))
+
+    -- fit small screens unless a size was saved
+    pcall(function()
+        local cam = workspace.CurrentCamera
+        local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
+        local fit = math.min(1, (vp.X - 24) / W, (vp.Y - 24) / H)
+        win._autoScale = math.floor(math.clamp(fit, 0.5, 1) * 100 / 5 + 0.5) * 5
+        local saved = tonumber(Odyssey.Flags.HoloScale)
+        win.Scale.Scale = (saved or win._autoScale) / 100
+    end)
+
+    -- search page
+    win._searchPage = {win = win, kind = "search", frame = Odyssey:OdysseyNew("ScrollingFrame", {Name = "Search", BackgroundTransparency = 1,
+        BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = C.border, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        Size = UDim2.new(1, 0, 1, 0), Visible = false, Parent = content})}
+    Odyssey:OdysseyPad(win._searchPage.frame, 7, 8, 7, 7)
+    Odyssey:OdysseyList(win._searchPage.frame, 5)
+    box:GetPropertyChangedSignal("Text"):Connect(function() Odyssey:OdysseySearch(win, box.Text) end)
+
+    -- ---------- window methods ----------
+    function win:CreateTab(t)
+        t = t or {}
+        local page = Odyssey:OdysseyPage(win, t, "tab")
+        page.button = Odyssey:OdysseyTabButton(win, tostring(t.Name or "Tab"), t.Icon, 10 + #win._pages)
+        page.button.MouseButton1Click:Connect(function() Odyssey:OdysseyOpenPage(win, page) end)
+        page.api = Odyssey:OdysseyTabApi(page)
+        Odyssey:OdysseySortTabs(win)
+        return page.api
+    end
+
+    function win:Notify(n) Odyssey:OdysseyNotify(win, n) end
+
+    function win:Confirm(c) Odyssey:OdysseyConfirm(win, c or {}) end
+
+    function win:CreateProgressWidget(p) return Odyssey:OdysseyProgressWidget(win, p or {}) end
+
+    function win:SetHomeStats(list)
+        for _, c in ipairs(win._statsFrame:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+        local out = {}
+        for i, s in ipairs(list or {}) do
+            local card = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.panel, LayoutOrder = i, Parent = win._statsFrame})
+            Odyssey:OdysseyCorner(card, 6)
+            Odyssey:OdysseyStroke(card)
+            Odyssey:OdysseyText({Text = tostring(s.Name), Size = 10, Color = C.muted, Pos = UDim2.new(0, 9, 0, 6), Sz = UDim2.new(1, -18, 0, 13), Parent = card})
+            local v = Odyssey:OdysseyText({Text = tostring(s.Value or "-"), Font = FONT_BOLD, Size = 13, Color = C.white, Pos = UDim2.new(0, 9, 0, 21),
+                Sz = UDim2.new(1, -18, 0, 16), Rich = true, Parent = card})
+            local fill
+            if s.Bar then
+                local bar = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.border, Size = UDim2.new(1, -18, 0, 3), Position = UDim2.new(0, 9, 1, -8), Parent = card})
+                Odyssey:OdysseyCorner(bar, 2)
+                fill = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.accent, Size = UDim2.new(0, 0, 1, 0), Parent = bar})
+                Odyssey:OdysseyCorner(fill, 2)
+            end
+            local el = {}
+            function el:Set(x)
+                if type(x) == "table" then
+                    if x.Value ~= nil then v.Text = tostring(x.Value) end
+                    if fill and tonumber(x.Percent) then
+                        local p = tonumber(x.Percent)
+                        if p > 1 then p = p / 100 end
+                        Odyssey:OdysseyTween(fill, 0.3, {Size = UDim2.new(math.clamp(p, 0, 1), 0, 1, 0)})
+                    end
+                else
+                    v.Text = tostring(x == nil and "-" or x)
+                end
+            end
+            out[s.Name] = el
+        end
+        return out
+    end
+
+    function win:SetHomeCard(c)
+        c = c or {}
+        local body = win._sessionBody
+        for _, k in ipairs(body:GetChildren()) do
+            if k:IsA("Frame") and k.Name ~= "Head" then k:Destroy() end
+        end
+        local headLabel = win._sessionHead:FindFirstChildOfClass("TextLabel")
+        if headLabel then headLabel.Text = tostring(c.Title or "Session"):upper() end
+        local out = {}
+        for i, r in ipairs(c.Rows or {}) do
+            local v = Odyssey:OdysseyKV(body, r.Name, r.Value or "-", true, i + 1)
+            local el = {}
+            function el:Set(x)
+                if type(x) == "table" then x = x.Value end
+                v.Text = tostring(x == nil and "-" or x)
+            end
+            out[r.Name] = el
+        end
+        return out
+    end
+
+    function win:CreateUpdateLog(u)
+        u = u or {}
+        local card = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.panel, Size = UDim2.new(1, -4, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+            LayoutOrder = -(#win._updates:GetChildren()), Parent = win._updates})
+        Odyssey:OdysseyCorner(card, 6)
+        Odyssey:OdysseyStroke(card)
+        Odyssey:OdysseyPad(card, 8, 9, 8, 9)
+        Odyssey:OdysseyList(card, 4)
+        Odyssey:OdysseyText({Text = tostring(u.Version or "Update") .. (u.Date and ("  ·  " .. tostring(u.Date)) or ""), Font = FONT_BOLD, Size = 12,
+            Color = C.white, Order = 0, Parent = card})
+        local TYPE_COLORS = {Added = C.good, Fixed = C.accent, Changed = C.warn, Removed = C.bad}
+        for i, e in ipairs(u.Entries or {}) do
+            local line = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = i, Parent = card})
+            local pill = Odyssey:OdysseyNew("TextLabel", {BackgroundColor3 = TYPE_COLORS[e.Type] or C.accent, BackgroundTransparency = 0.8,
+                FontFace = FONT_BOLD, TextSize = 9, TextColor3 = TYPE_COLORS[e.Type] or C.accent, Text = tostring(e.Type or "Note"):upper(),
+                Size = UDim2.new(0, 58, 0, 15), Parent = line})
+            Odyssey:OdysseyCorner(pill, 4)
+            Odyssey:OdysseyText({Text = tostring(e.Text or ""), Size = 11, Wrap = true, Pos = UDim2.new(0, 66, 0, 0), Sz = UDim2.new(1, -66, 0, 0),
+                Auto = Enum.AutomaticSize.Y, Parent = line})
+        end
+    end
+
+    function win:CreateDiscordButton(d)
+        d = d or {}
+        win._discordCb = d.Callback
+        if d.Label then win._discordBtn.Text = tostring(d.Label):gsub("Odyssey Discord Server", "Odyssey Hub") end
+    end
+
+    function win:SetTier(t)
+        if win._badge then win._badge:Destroy() end
+        win._badge = Odyssey:OdysseyBadge(win, badgeHolder, t)
+    end
+
+    function win:_relayoutTabs(compact) Odyssey:OdysseyRelayout(win, compact) end
+
+    function win:Destroy()
+        if win._dead then return end
+        win._dead = true
+        pcall(function() if type(win.OnDestroy) == "function" then win.OnDestroy() end end)
+        for _, c in ipairs(win._conns) do pcall(function() c:Disconnect() end) end
+        pcall(function() gui:Destroy() end)
+    end
+
+    -- Home first, Settings last; scripts can add their own settings with Window.ExtraSettings = function(tab) ... end
+    Odyssey:OdysseyBuildHome(win)
+    Odyssey:OdysseySettingsTab(win)
+    Odyssey:OdysseyOpenPage(win, win._home)
+
+    -- keep the shown key in step with the Settings bind
+    task.spawn(function()
+        while not win._dead do
+            local k = Odyssey:OdysseyKeyFrom(Odyssey.Flags.HoloToggleKey)
+            if k and k ~= win.toggleKey then win.toggleKey = k drawKey() end
+            task.wait(1)
+        end
+    end)
+
+    return setmetatable(win, {
+        __newindex = function(t, k, v)
+            rawset(t, k, v)
+            -- the script's own Settings sections go under the built-in ones
+            if k == "ExtraSettings" and type(v) == "function" and win._settings then
+                local api = win._settings.api
+                api:Side("Left")
+                Odyssey:OdysseySafe(v, api)
+                Odyssey:OdysseyRelayout(win, win._compact)
+            end
+        end,
+    })
+end
+
+return Odyssey
