@@ -515,12 +515,20 @@ function Odyssey:OdysseyApplySub(win, page)
     for _, card in ipairs(root.cards) do
         if Odyssey:OdysseyGroupOf(card) == sel then usesCol[math.clamp(card:GetAttribute("Col") or 1, 1, 2)] = true end
     end
-    local two = usesCol[1] and usesCol[2]
+    local count = 0
+    for _, card in ipairs(root.cards) do if Odyssey:OdysseyGroupOf(card) == sel then count += 1 end end
+    -- keep the two-column grid: a group whose sections all sit in one column is split over both
+    local split = not (usesCol[1] and usesCol[2]) and count >= 2
+    local two = count >= 2
+    local k = 0
     for i, card in ipairs(root.cards) do
         local on = Odyssey:OdysseyGroupOf(card) == sel
         card.Visible = on
         if on then
-            local col = two and math.clamp(card:GetAttribute("Col") or 1, 1, 2) or 1
+            k += 1
+            local col = 1
+            if split then col = (k % 2 == 1) and 1 or 2
+            elseif two then col = math.clamp(card:GetAttribute("Col") or 1, 1, 2) end
             card.Parent = root.cols[col]
             card.LayoutOrder = i
         end
@@ -573,7 +581,9 @@ function Odyssey:OdysseySection(page, name, col)
     if not name or name == "" then head.Visible = false end
     local list = Odyssey:OdysseyNew("Frame", {Name = "List", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 1, Parent = body})
-    Odyssey:OdysseyList(list, 5)
+    local ll = Odyssey:OdysseyList(list, 5, Enum.FillDirection.Horizontal)
+    ll.Wraps = true
+    card:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() Odyssey:OdysseyGrid(card) end)
     table.insert(page.root.cards, card)
     card.LayoutOrder = #page.root.cards
     table.insert(win._searchSections, card)
@@ -595,6 +605,35 @@ function Odyssey:OdysseySection(page, name, col)
     return sec
 end
 
+-- Side by side grid: in a wide section toggles, buttons and sliders go two per line;
+-- dropdowns, labels and paragraphs always take the whole line
+function Odyssey:OdysseyGrid(card)
+    if not card or not card.Parent then return end
+    local s = 1
+    pcall(function()
+        local root = card
+        while root and root.Parent and not root:FindFirstChildOfClass("UIScale") do root = root.Parent end
+        local u = root and root:FindFirstChildOfClass("UIScale")
+        s = u and u.Scale or 1
+    end)
+    local wide = (card.AbsoluteSize.X / s) > 380
+    local body = card:FindFirstChild("Body")
+    for _, list in ipairs(body and body:GetChildren() or {}) do
+        if list.Name == "List" then
+            for _, row in ipairs(list:GetChildren()) do
+                if row:IsA("GuiObject") then
+                    local h = row.Size.Y.Offset
+                    if row:GetAttribute("Half") then
+                        row.Size = wide and UDim2.new(0.5, -3, 0, h) or UDim2.new(1, 0, 0, h)
+                    else
+                        row.Size = UDim2.new(1, 0, 0, h)
+                    end
+                end
+            end
+        end
+    end
+end
+
 -- Which section a new element goes in
 function Odyssey:OdysseyTarget(page, opts)
     local want = (type(opts) == "table" and opts.Side == "Right") and 2 or ((type(opts) == "table" and opts.Side == "Left") and 1 or nil)
@@ -606,7 +645,7 @@ function Odyssey:OdysseyTarget(page, opts)
 end
 
 -- Element row frame
-function Odyssey:OdysseyRow(sec, height, box)
+function Odyssey:OdysseyRow(sec, height, box, half)
     sec.n += 1
     local row = Odyssey:OdysseyNew(box and "TextButton" or "Frame", {
         Name = "Row",
@@ -617,6 +656,10 @@ function Odyssey:OdysseyRow(sec, height, box)
         LayoutOrder = sec.n,
         Parent = sec.list,
     })
+    if half then
+        row:SetAttribute("Half", true)
+        Odyssey:OdysseyGrid(sec.card)
+    end
     if row:IsA("TextButton") then row.AutoButtonColor = false row.Text = "" end
     if box then
         row.BackgroundTransparency = 0.15
@@ -666,7 +709,7 @@ end
 function Odyssey:OdysseyToggle(page, o)
     local win = page.win
     local sec = Odyssey:OdysseyTarget(page, o)
-    local row = Odyssey:OdysseyRow(sec, 28, true)
+    local row = Odyssey:OdysseyRow(sec, 28, true, true)
     local _, desc = Odyssey:OdysseyNameBlock(row, o.Name, o.Description, 44)
     local track = Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.dark, Size = UDim2.new(0, 28, 0, 15), AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.new(1, -10, 0.5, 0), Parent = row})
@@ -726,7 +769,7 @@ function Odyssey:OdysseyButton(page, o)
         Odyssey:OdysseyCorner(row, 4)
         Odyssey:OdysseyStroke(row)
     else
-        row = Odyssey:OdysseyRow(sec, 28, true)
+        row = Odyssey:OdysseyRow(sec, 28, true, true)
     end
     local base = (o.Style == "Primary" and C.accent) or (o.Style == "Danger" and C.danger) or C.hover
     local fg = (o.Style == "Primary" and C.dark) or C.white
@@ -813,7 +856,7 @@ end
 function Odyssey:OdysseySlider(page, o)
     local win = page.win
     local sec = Odyssey:OdysseyTarget(page, o)
-    local row = Odyssey:OdysseyRow(sec, 40, true)
+    local row = Odyssey:OdysseyRow(sec, 40, true, true)
     local lo, hi = (o.Range and o.Range[1]) or 0, (o.Range and o.Range[2]) or 100
     local inc = tonumber(o.Increment) or 1
     local holder = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Parent = row})
@@ -1037,7 +1080,7 @@ end
 function Odyssey:OdysseyInput(page, o)
     local win = page.win
     local sec = Odyssey:OdysseyTarget(page, o)
-    local row = Odyssey:OdysseyRow(sec, 0, true)
+    local row = Odyssey:OdysseyRow(sec, 0, true, true)
     local holder = Odyssey:OdysseyNew("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Parent = row})
     Odyssey:OdysseyList(holder, 4)
     Odyssey:OdysseyPad(holder, 6, 8, 7, 8)
@@ -1083,7 +1126,7 @@ end
 function Odyssey:OdysseyBind(page, o)
     local win = page.win
     local sec = Odyssey:OdysseyTarget(page, o)
-    local row = Odyssey:OdysseyRow(sec, 28, true)
+    local row = Odyssey:OdysseyRow(sec, 28, true, true)
     local _, desc = Odyssey:OdysseyNameBlock(row, o.Name, o.Description, 90)
     local keyBox = Odyssey:OdysseyNew("TextButton", {AutoButtonColor = false, BackgroundColor3 = C.dark, FontFace = FONT_MED, TextSize = 11,
         TextColor3 = C.accent, Text = "", AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.new(0, 40, 0, 20), AnchorPoint = Vector2.new(1, 0.5),
@@ -1125,7 +1168,7 @@ end
 -- Stat (big number box)
 function Odyssey:OdysseyStat(page, o)
     local sec = Odyssey:OdysseyTarget(page, o)
-    local row = Odyssey:OdysseyRow(sec, tonumber(o.Height) or 46, true)
+    local row = Odyssey:OdysseyRow(sec, tonumber(o.Height) or 46, true, true)
     row.AutomaticSize = Enum.AutomaticSize.None
     Odyssey:OdysseyText({Text = tostring(o.Name or ""), Size = 10, Color = C.muted, Pos = UDim2.new(0, 9, 0, 6), Sz = UDim2.new(1, -18, 0, 13), Parent = row})
     local v = Odyssey:OdysseyText({Text = tostring(o.Value or "-"), Size = tonumber(o.TextSize) or 16, Color = C.white, Font = FONT_BOLD,
@@ -1143,7 +1186,7 @@ end
 -- Progress bar
 function Odyssey:OdysseyProgress(page, o)
     local sec = Odyssey:OdysseyTarget(page, o)
-    local row = Odyssey:OdysseyRow(sec, 36, true)
+    local row = Odyssey:OdysseyRow(sec, 36, true, true)
     row.AutomaticSize = Enum.AutomaticSize.None
     Odyssey:OdysseyText({Text = tostring(o.Name or ""), Size = 11, Pos = UDim2.new(0, 9, 0, 5), Sz = UDim2.new(0.6, -9, 0, 14), Parent = row})
     local txt = Odyssey:OdysseyText({Text = tostring(o.Text or ""), Size = 11, Color = C.accent, AlignX = Enum.TextXAlignment.Right,
