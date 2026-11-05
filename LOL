@@ -11,7 +11,8 @@
 
 local Odyssey = {}
 Odyssey.Flags = {}
-Odyssey.Version = "2.0 · test 12"
+Odyssey.Version = "2.0 · test 13"
+Odyssey.TestBuild = 13
 
 -- ========== Settings ==========
 
@@ -1758,7 +1759,7 @@ function Odyssey:CreateWindow(o)
     local brand = Odyssey:OdysseyNew("Frame", {Name = "Brand", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 146), Parent = side})
     Odyssey:OdysseyText({Text = win.name, Font = FONT_BOLD, Size = 16, AlignX = Enum.TextXAlignment.Center, Pos = UDim2.new(0, 0, 0, 10),
         Sz = UDim2.new(1, 0, 0, 20), Parent = brand})
-    Odyssey:OdysseyText({Text = tostring(o.Subtitle or ""), Size = 10, Color = C.muted, AlignX = Enum.TextXAlignment.Center,
+    Odyssey:OdysseyText({Text = tostring(o.Subtitle or "") .. "  ·  test " .. Odyssey.TestBuild, Size = 10, Color = C.muted, AlignX = Enum.TextXAlignment.Center,
         Pos = UDim2.new(0, 0, 0, 30), Sz = UDim2.new(1, 0, 0, 14), Parent = brand})
     local logo = Odyssey:OdysseyNew("ImageLabel", {Name = "Logo", BackgroundColor3 = C.item, Image = tostring(o.Logo or o.Icon or ""),
         ScaleType = Enum.ScaleType.Crop, Size = UDim2.new(0, 92, 0, 92), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 50), Parent = brand})
@@ -2050,6 +2051,11 @@ function Odyssey:CreateWindow(o)
     emptyNote(win._fixes, "No bug fixes yet")
     Odyssey:OdysseySettingsTab(win)
     Odyssey:OdysseyOpenPage(win, win._home)
+
+    -- shows which test build you're running, so you can tell GitHub served the new file
+    task.delay(1, function()
+        win:Notify({Type = "Success", Title = "Odyssey UI · test " .. Odyssey.TestBuild, Content = "You're on test build " .. Odyssey.TestBuild .. ".", Duration = 8})
+    end)
 
     -- keep the shown key in step with the Settings bind
     task.spawn(function()
