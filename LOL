@@ -74,8 +74,19 @@ end
 
 -- ========== Functions · Helpers ==========
 
+-- Game code can hand the thread back with less access (after a game function waits).
+-- The menu lives in a protected spot, so put the access back before making anything
+local getId = getthreadidentity or get_thread_identity or (syn and syn.get_thread_identity)
+local setId = setthreadidentity or set_thread_identity or (syn and syn.set_thread_identity)
+function Odyssey:OdysseyAccess()
+    if not (getId and setId) then return end
+    local ok, id = pcall(getId)
+    if ok and type(id) == "number" and id < 7 then pcall(setId, 8) end
+end
+
 -- New instance with properties
 function Odyssey:OdysseyNew(class, props, kids)
+    Odyssey:OdysseyAccess()
     local o = Instance.new(class)
     for k, v in pairs(props or {}) do
         if k ~= "Parent" then o[k] = v end
@@ -139,11 +150,16 @@ function Odyssey:OdysseyTween(o, t, props)
     return tw
 end
 
--- Safe call (errors go to the console, never stop the UI)
+-- Safe call (errors go to the console, never stop the UI). Runs in its own thread: a callback that
+-- calls the game can't lower the access of the script that made the element
 function Odyssey:OdysseySafe(fn, ...)
     if type(fn) ~= "function" then return end
-    local ok, err = pcall(fn, ...)
-    if not ok then warn("[Odyssey UI] " .. tostring(err)) end
+    local args = table.pack(...)
+    task.spawn(function()
+        local ok, err = pcall(fn, table.unpack(args, 1, args.n))
+        if not ok then warn("[Odyssey UI] " .. tostring(err)) end
+    end)
+    Odyssey:OdysseyAccess()
 end
 
 -- Where the UI lives
