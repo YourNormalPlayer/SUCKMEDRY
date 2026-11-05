@@ -11,7 +11,7 @@
 
 local Odyssey = {}
 Odyssey.Flags = {}
-Odyssey.Version = "2.0 · test 13"
+Odyssey.Version = "2.1 · test 13"
 Odyssey.TestBuild = 13
 
 -- ========== Settings ==========
