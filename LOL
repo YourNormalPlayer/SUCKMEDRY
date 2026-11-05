@@ -1250,15 +1250,16 @@ function Odyssey:OdysseyBuildHome(win)
         SortOrder = Enum.SortOrder.LayoutOrder, Parent = stats})
     win._statsFrame = stats
     local mid = Odyssey:OdysseyNew("Frame", {Name = "Middle", BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 108),
-        Size = UDim2.new(1, 0, 0, 112), Parent = ov})
-    local bottom = Odyssey:OdysseyNew("Frame", {Name = "Bottom", BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 228),
-        Size = UDim2.new(1, 0, 1, -228), Parent = ov})
+        Size = UDim2.new(1, 0, 1, -108 - 8 - 132), Parent = ov})
+    local bottom = Odyssey:OdysseyNew("Frame", {Name = "Bottom", BackgroundTransparency = 1, Position = UDim2.new(1, 0, 1, -132), AnchorPoint = Vector2.new(1, 0),
+        Size = UDim2.new(1, 0, 0, 132), Parent = ov})
     for _, f in ipairs({mid, bottom}) do
         Odyssey:OdysseyNew("UIGridLayout", {CellPadding = UDim2.new(0, 8, 0, 0), CellSize = UDim2.new(0.5, -4, 1, 0),
             SortOrder = Enum.SortOrder.LayoutOrder, Parent = f})
     end
     -- Character
     local _, cb, ch = Odyssey:OdysseyCard(mid, "Character", 1)
+    cb:FindFirstChildOfClass("UIListLayout").Padding = UDim.new(0, 8)
     local age = 0
     pcall(function() age = LP.AccountAge end)
     local real = Odyssey:OdysseyNew("TextLabel", {BackgroundColor3 = age >= 30 and C.good or C.warn, BackgroundTransparency = 0.82,
@@ -1272,21 +1273,20 @@ function Odyssey:OdysseyBuildHome(win)
     Odyssey:OdysseyKV(cb, "User ID", tostring(LP.UserId), false, 5)
     -- Session (filled by SetHomeCard)
     local sc, sb, sh = Odyssey:OdysseyCard(mid, "Session", 2)
+    sb:FindFirstChildOfClass("UIListLayout").Padding = UDim.new(0, 8)
     win._sessionCard, win._sessionBody, win._sessionHead = sc, sb, sh
     -- Shop + Discord
     local _, shopB = Odyssey:OdysseyCard(bottom, "Odyssey Shop", 1)
     Odyssey:OdysseyText({Text = SHOP_TEXT, Size = 10, Wrap = true, Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Order = 2, Parent = shopB})
     Odyssey:OdysseyText({Text = "Items · Pets · Currency", Size = 9, Color = C.muted, Order = 3, Parent = shopB})
     local shopBtn = Odyssey:OdysseyPill(shopB, "Shop · Soon", false, 9)
-    Odyssey:OdysseyPinBottom(shopBtn)
     shopBtn.MouseButton1Click:Connect(function()
         win:Notify({Title = "Odyssey Shop", Content = "Coming soon. Orders go through the Odyssey Hub Discord."})
     end)
     local _, discB = Odyssey:OdysseyCard(bottom, "Odyssey Hub Discord", 2)
-    Odyssey:OdysseyText({Text = DISCORD_TEXT, Size = 10, Wrap = true, Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Order = 2, Parent = discB})
+    Odyssey:OdysseyText({Text = DISCORD_TEXT .. " New games are announced there first.", Size = 10, Wrap = true, Sz = UDim2.new(1, 0, 0, 0), Auto = Enum.AutomaticSize.Y, Order = 2, Parent = discB})
     Odyssey:OdysseyText({Text = "Odyssey Paid · Out now", Size = 9, Color = C.muted, Order = 3, Parent = discB})
     win._discordBtn = Odyssey:OdysseyPill(discB, "Join Odyssey Hub", true, 9)
-    Odyssey:OdysseyPinBottom(win._discordBtn)
     win._discordBtn.MouseButton1Click:Connect(function()
         if win._discordCb then Odyssey:OdysseySafe(win._discordCb) end
     end)
