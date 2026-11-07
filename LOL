@@ -11,8 +11,8 @@
 
 local Odyssey = {}
 Odyssey.Flags = {}
-Odyssey.Version = "2.1 · test 13"
-Odyssey.TestBuild = 13
+Odyssey.Version = "2.0 · test 15"
+Odyssey.TestBuild = 15
 
 -- ========== Settings ==========
 
@@ -402,6 +402,12 @@ function Odyssey:OdysseyOpenPage(win, page)
     end
     win._searchPage.frame.Visible = (page == win._searchPage)
     win._current = page
+    if win._footInfo then
+        local info = page.desc
+        if page.kind == "home" then info = "Your stats. Pick a tab on the left to start"
+        elseif page.kind == "search" then info = "Click a result to go to it" end
+        win._footInfo.Text = tostring(info or "")
+    end
     Odyssey:OdysseyBuildHeader(win)
     if page.root then Odyssey:OdysseyFill(win, page) end
 end
@@ -440,7 +446,25 @@ function Odyssey:OdysseySortTabs(win)
         if a.order ~= b.order then return a.order < b.order end
         return a.idx < b.idx
     end)
-    for i, p in ipairs(list) do p.button.LayoutOrder = 10 + i end
+    for _, c in ipairs(win._tabList:GetChildren()) do if c.Name == "GroupTitle" then c:Destroy() end end
+    local function title(text, order)
+        local t = Odyssey:OdysseyText({Name = "GroupTitle", Text = text, Font = FONT_BOLD, Size = 9, Color = C.dim, Order = order,
+            Sz = UDim2.new(1, 0, 0, 18), AlignY = Enum.TextYAlignment.Bottom, Parent = win._tabList})
+        Odyssey:OdysseyPad(t, 0, 0, 2, 8)
+    end
+    local last
+    local order = 10
+    for _, p in ipairs(list) do
+        local g = (p.group == "Player") and "YOU" or "GAME"
+        if g ~= last then
+            order += 1
+            title(g, order)
+            last = g
+        end
+        order += 1
+        p.button.LayoutOrder = order
+    end
+    title("MENU", 9999)
 end
 
 -- Keep both columns as tall as the page so panels reach the bottom.
@@ -596,7 +620,10 @@ function Odyssey:OdysseySection(page, name, col)
     Odyssey:OdysseyPad(body, 8, 9, 8, 9)
     Odyssey:OdysseyList(body, 5)
     local head = Odyssey:OdysseyNew("Frame", {Name = "Head", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 14), LayoutOrder = 0, Parent = body})
-    Odyssey:OdysseyText({Text = tostring(name or ""):upper(), Font = FONT_BOLD, Size = 10, Color = C.muted, Sz = UDim2.new(1, 0, 1, 0), Parent = head})
+    Odyssey:OdysseyNew("Frame", {Name = "Bar", BackgroundColor3 = C.accent, BorderSizePixel = 0, Size = UDim2.new(0, 3, 0, 10),
+        AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 0, 0.5, 0), Parent = head})
+    Odyssey:OdysseyText({Text = tostring(name or ""):upper(), Font = FONT_BOLD, Size = 10, Color = C.muted, Pos = UDim2.new(0, 8, 0, 0),
+        Sz = UDim2.new(1, -8, 1, 0), Parent = head})
     if not name or name == "" then head.Visible = false end
     local list = Odyssey:OdysseyNew("Frame", {Name = "List", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 1, Parent = body})
@@ -1035,12 +1062,18 @@ function Odyssey:OdysseyDropdown(page, o)
         elseif el.CurrentOption ~= nil then s[el.CurrentOption] = true end
         return s
     end
+    local function label(v)
+        if type(v) == "table" then return tostring(v.Text or v.Name or v[1] or "") end
+        return tostring(v)
+    end
     local function drawShown()
         if multi then
             local n = #el.CurrentOption
-            shown.Text = n == 0 and "None" or (n <= 2 and table.concat(el.CurrentOption, ", ") or (el.CurrentOption[1] .. ", +" .. (n - 1) .. " more"))
+            local names = {}
+            for i, v in ipairs(el.CurrentOption) do names[i] = label(v) end
+            shown.Text = n == 0 and "None" or (n <= 2 and table.concat(names, ", ") or (names[1] .. ", +" .. (n - 1) .. " more"))
         else
-            shown.Text = el.CurrentOption ~= nil and tostring(el.CurrentOption) or "None"
+            shown.Text = el.CurrentOption ~= nil and label(el.CurrentOption) or "None"
         end
     end
     local fire
@@ -1050,13 +1083,17 @@ function Odyssey:OdysseyDropdown(page, o)
         local sel = selectedSet()
         local n = 0
         for i, opt in ipairs(el.Options) do
-            local s = tostring(opt)
+            local s = label(opt)
             if q == "" or s:lower():find(q, 1, true) then
                 n += 1
                 local b = Odyssey:OdysseyNew("TextButton", {Text = "", AutoButtonColor = false, BackgroundColor3 = sel[opt] and C.hover or C.item,
                     Size = UDim2.new(1, -4, 0, 22), LayoutOrder = i, Parent = listBox})
                 Odyssey:OdysseyCorner(b, 4)
                 Odyssey:OdysseyText({Text = s, Size = 11, Color = sel[opt] and C.white or C.text, Sz = UDim2.new(1, -26, 1, 0), Pos = UDim2.new(0, 8, 0, 0), Parent = b})
+                if type(opt) == "table" and opt.Right then
+                    Odyssey:OdysseyText({Text = tostring(opt.Right), Size = 10, Color = C.muted, AlignX = Enum.TextXAlignment.Right,
+                        Anchor = Vector2.new(1, 0), Pos = UDim2.new(1, -24, 0, 0), Sz = UDim2.new(0.5, -24, 1, 0), Parent = b})
+                end
                 if sel[opt] then
                     Odyssey:OdysseyText({Text = "✓", Size = 12, Color = C.accent, Sz = UDim2.new(0, 16, 1, 0), Anchor = Vector2.new(1, 0),
                         Pos = UDim2.new(1, -4, 0, 0), AlignX = Enum.TextXAlignment.Center, Parent = b})
@@ -1339,7 +1376,7 @@ function Odyssey:OdysseyPage(win, o, kind)
         Visible = false,
         Parent = win._content,
     })
-    local page = {win = win, frame = frame, kind = kind or "tab", name = o.Name, group = o.Group, order = tonumber(o.Order) or 99,
+    local page = {win = win, frame = frame, kind = kind or "tab", name = o.Name, desc = o.Description, group = o.Group, order = tonumber(o.Order) or 99,
         idx = #win._pages + 1, col = 1, lastByCol = {}}
     if page.kind == "tab" then
         local colsFrame = Odyssey:OdysseyNew("Frame", {Name = "Columns", BackgroundTransparency = 1, Size = UDim2.new(1, -14, 0, 0),
@@ -1829,10 +1866,10 @@ function Odyssey:CreateWindow(o)
     -- footer
     local foot = Odyssey:OdysseyNew("Frame", {Name = "Footer", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(0, 0, 1, -22), Parent = main})
     Odyssey:OdysseyNew("Frame", {BackgroundColor3 = C.border, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 1), Parent = foot})
-    local keyText = Odyssey:OdysseyText({Text = "", Size = 10, Color = C.muted, Pos = UDim2.new(0, 10, 0, 0), Sz = UDim2.new(0.6, 0, 1, 0), Parent = foot})
-    Odyssey:OdysseyText({Text = "Theme: Ocean Steel", Size = 10, Color = C.muted, AlignX = Enum.TextXAlignment.Right, Anchor = Vector2.new(1, 0),
-        Pos = UDim2.new(1, -10, 0, 0), Sz = UDim2.new(0.4, 0, 1, 0), Parent = foot})
-    local function drawKey() keyText.Text = "Toggle UI: " .. Odyssey:OdysseyKeyName(win.toggleKey) .. " · Lib v" .. Odyssey.Version end
+    win._footInfo = Odyssey:OdysseyText({Text = "", Size = 10, Color = C.muted, Pos = UDim2.new(0, 10, 0, 0), Sz = UDim2.new(0.62, -10, 1, 0), Parent = foot})
+    local keyText = Odyssey:OdysseyText({Text = "", Size = 10, Color = C.dim, AlignX = Enum.TextXAlignment.Right, Anchor = Vector2.new(1, 0),
+        Pos = UDim2.new(1, -10, 0, 0), Sz = UDim2.new(0.38, 0, 1, 0), Parent = foot})
+    local function drawKey() keyText.Text = Odyssey:OdysseyKeyName(win.toggleKey) .. " hides the menu · test " .. Odyssey.TestBuild end
     drawKey()
 
     -- notifications
@@ -2055,6 +2092,12 @@ function Odyssey:CreateWindow(o)
     -- shows which test build you're running, so you can tell GitHub served the new file
     task.delay(1, function()
         win:Notify({Type = "Success", Title = "Odyssey UI · test " .. Odyssey.TestBuild, Content = "You're on test build " .. Odyssey.TestBuild .. ".", Duration = 8})
+        if not Odyssey.Flags.HoloWelcomed then
+            task.wait(1.5)
+            win:Notify({Title = "Welcome to Odyssey", Content = "Pick a tab on the left and turn on what you want, it starts right away. Use Search to find any setting. "
+                .. Odyssey:OdysseyKeyName(win.toggleKey) .. " hides the menu.", Duration = 12})
+            Odyssey:OdysseySetFlag(win, "HoloWelcomed", true)
+        end
     end)
 
     -- keep the shown key in step with the Settings bind
